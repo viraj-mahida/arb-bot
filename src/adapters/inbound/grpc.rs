@@ -9,9 +9,9 @@ use yellowstone_grpc_client::{
     SubscribeRequestSink
 };
 use yellowstone_grpc_proto::geyser::{
+    CommitmentLevel,
     SubscribeRequest,
-    SubscribeRequestFilterBlocksMeta,
-    SubscribeRequestFilterTransactions
+    SubscribeRequestFilterAccounts,
 };
 
 use crate::core::{ORCA_WHIRLPOOL_SOL_USDC, RAYDIUM_CLMM_SOL_USDC};
@@ -32,29 +32,21 @@ pub async fn connect_grpc() -> GeyserGrpcClientResult<(SubscribeRequestSink, Gey
 
     let (mut tx, stream) = client.subscribe().await.expect("Failed to subscribe gRPC");
 
-    let mut transactions = HashMap::new();
-    transactions.insert(
-        "all-txn".to_string(), 
-        SubscribeRequestFilterTransactions{
-            vote: Some(false),
-            failed: Some(false),
-            account_include: vec![
-                RAYDIUM_CLMM_SOL_USDC.into(),   //Raydium CLMM 0.04% SOL-USDC 
-                ORCA_WHIRLPOOL_SOL_USDC.into(), //Ocra    CLMM 0.04% SOL-USDC
+    let mut accounts = HashMap::new();
+    accounts.insert(
+        "pools".to_string(),
+        SubscribeRequestFilterAccounts {
+            account: vec![
+                RAYDIUM_CLMM_SOL_USDC.into(),   // Raydium CLMM 0.04% SOL-USDC
+                ORCA_WHIRLPOOL_SOL_USDC.into(), // Orca CLMM 0.04% SOL-USDC
             ],
             ..Default::default()
-        }
+        },
     );
 
-    let mut blocks_meta = HashMap::new();
-    blocks_meta.insert(
-        "all-blocks".to_string(),
-        SubscribeRequestFilterBlocksMeta{}
-    );
-
-    let request = SubscribeRequest{
-        transactions,
-        blocks_meta,
+    let request = SubscribeRequest {
+        accounts,
+        commitment: Some(CommitmentLevel::Processed as i32),
         ..Default::default()
     };
 
