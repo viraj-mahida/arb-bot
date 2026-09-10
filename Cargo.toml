@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 yellowstone-grpc-client = "13.3"
 yellowstone-grpc-proto = "12.7"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
+bs58 = "0.5.1"
+dotenvy = "0.15.7"
