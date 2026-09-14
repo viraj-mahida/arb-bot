@@ -1,5 +1,4 @@
-mod inbound;
 mod decoder;
+mod inbound;
 
 pub use inbound::*;
-pub use decoder::*;

@@ -14,9 +14,11 @@ use yellowstone_grpc_proto::geyser::{
     SubscribeRequestFilterAccounts,
 };
 
-use crate::core::{ORCA_WHIRLPOOL_SOL_USDC, RAYDIUM_CLMM_SOL_USDC};
+use crate::core::PoolRegistry;
 
-pub async fn connect_grpc() -> GeyserGrpcClientResult<(SubscribeRequestSink, GeyserStream)> {
+pub async fn connect_grpc(
+    registry: &PoolRegistry,
+) -> GeyserGrpcClientResult<(SubscribeRequestSink, GeyserStream)> {
     let endpoint = std::env::var("GRPC_URL").expect("GRPC_URL missing");
     let token = std::env::var("X_TOKEN").expect("X_TOKEN missing");
 
@@ -36,10 +38,7 @@ pub async fn connect_grpc() -> GeyserGrpcClientResult<(SubscribeRequestSink, Gey
     accounts.insert(
         "pools".to_string(),
         SubscribeRequestFilterAccounts {
-            account: vec![
-                RAYDIUM_CLMM_SOL_USDC.into(),   // Raydium CLMM 0.04% SOL-USDC
-                ORCA_WHIRLPOOL_SOL_USDC.into(), // Orca CLMM 0.04% SOL-USDC
-            ],
+            account: registry.subscribe_addresses(),
             ..Default::default()
         },
     );
