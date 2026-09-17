@@ -15,8 +15,6 @@ async fn main() {
     let registry = PoolRegistry::sol_usdc_clmm();
     let cache = PoolCache::new();
 
-    let (_, stream) = connect_grpc(&registry)
-        .await
-        .expect("failed to get stream");
-    ingest_pool_updates(stream, &registry, &cache).await;
+    let (tx, stream) = connect_grpc(&registry).await.expect("failed to get stream");
+    ingest_pool_updates(stream, tx, &registry, &cache).await;
 }

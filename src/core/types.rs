@@ -11,9 +11,16 @@ impl Venue {
             Venue::OrcaWhirlpool => "orca_whirlpool",
         }
     }
+
+    pub fn ticks_per_array(self) -> i32 {
+        match self {
+            Venue::RaydiumClmm => 60,
+            Venue::OrcaWhirlpool => 88,
+        }
+    }
 }
 
-/// Venue-agnostic CLMM snapshot. Tick arrays live on the cache later, not here.
+/// Venue-agnostic CLMM snapshot. Nearby tick arrays live on `PoolCache`.
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // mint/vault/fee fields are for quoting next
 pub struct ClmmPoolState {
@@ -41,4 +48,34 @@ impl ClmmPoolState {
         let sqrt = (self.sqrt_price_x64 as f64) / 2f64.powi(64);
         sqrt.powi(2) * 10f64.powi(i32::from(self.decimals_a) - i32::from(self.decimals_b))
     }
+}
+
+/// PDA we derived (and subscribed to) for one tick-array account.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TickArrayRef {
+    pub pubkey: [u8; 32],
+    pub pool: [u8; 32],
+    pub venue: Venue,
+    pub start_tick_index: i32,
+    pub tick_spacing: u16,
+}
+
+/// One initialized tick on the liquidity curve. `liquidity_net` is ΔL when price crosses this tick left→right.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InitializedTick {
+    pub tick: i32,
+    pub liquidity_net: i128,
+}
+
+/// Decoded tick-array snapshot, keyed on cache by `pubkey`.
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // venue/slot used by quoting next
+pub struct TickArraySnapshot {
+    pub pubkey: [u8; 32],
+    pub pool: [u8; 32],
+    pub venue: Venue,
+    pub start_tick_index: i32,
+    pub ticks: Vec<InitializedTick>,
+    pub slot: u64,
+    pub write_version: u64,
 }

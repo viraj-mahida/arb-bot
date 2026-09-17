@@ -73,8 +73,7 @@ impl PoolRegistry {
     }
 
     pub fn get(&self, pubkey: &[u8; 32]) -> Option<&PoolSpec> {
-        self.by_address.get(pubkey)
-            .map(|&i| &self.specs[i])
+        self.by_address.get(pubkey).map(|&i| &self.specs[i])
     }
 
     #[allow(dead_code)]
