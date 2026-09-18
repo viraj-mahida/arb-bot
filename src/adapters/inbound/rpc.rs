@@ -60,7 +60,7 @@ impl RpcClient {
         if let Some(error) = envelope.error {
             return Err(error.to_string());
         }
-        
+
         let Some(result) = envelope.result else {
             return Err("rpc response missing result".into());
         };

@@ -9,7 +9,7 @@ use yellowstone_grpc_proto::geyser::{
     CommitmentLevel, SubscribeRequest, SubscribeRequestFilterAccounts,
 };
 
-use crate::core::PoolRegistry;
+use crate::core::{PoolRegistry, log};
 
 pub async fn connect_grpc(
     registry: &PoolRegistry,
@@ -17,6 +17,7 @@ pub async fn connect_grpc(
     let endpoint = std::env::var("GRPC_URL").expect("GRPC_URL missing");
     let token = std::env::var("X_TOKEN").expect("X_TOKEN missing");
 
+    log::grpc_connecting();
     let mut builder = GeyserGrpcClient::build_from_shared(endpoint.clone())
         .expect("Failed to create gRPC client");
 
@@ -34,9 +35,11 @@ pub async fn connect_grpc(
 
     let (mut tx, stream) = client.subscribe().await.expect("Failed to subscribe gRPC");
 
-    subscribe_accounts(&mut tx, registry.subscribe_addresses())
+    let pools = registry.subscribe_addresses();
+    subscribe_accounts(&mut tx, pools.clone())
         .await
         .expect("Failed to send tx");
+    log::grpc_subscribed(pools.len());
 
     Ok((tx, stream))
 }

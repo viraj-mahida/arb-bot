@@ -76,7 +76,6 @@ impl PoolRegistry {
         self.by_address.get(pubkey).map(|&i| &self.specs[i])
     }
 
-    #[allow(dead_code)]
     pub fn specs(&self) -> &[PoolSpec] {
         &self.specs
     }

@@ -81,7 +81,8 @@ pub fn decode_tick_array(
     for i in 0..TICK_COUNT {
         let off = TICKS_OFF + i * TICK_LEN;
         let liquidity_gross = bytes::u128_le(data, off + 20)?; // tick(i32) 4 bytes + liquidity_net(i128) 16 bytes
-        if liquidity_gross == 0 { // uninitialized tick
+        if liquidity_gross == 0 {
+            // uninitialized tick
             continue;
         }
         ticks.push(InitializedTick {

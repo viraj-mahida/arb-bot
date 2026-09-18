@@ -1,5 +1,6 @@
 mod cache;
 mod constants;
+pub mod log;
 mod pubkey;
 mod registry;
 mod tick_array;

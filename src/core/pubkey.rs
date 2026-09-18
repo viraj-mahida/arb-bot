@@ -11,6 +11,15 @@ pub fn encode_pubkey(bytes: &[u8; 32]) -> String {
     bs58::encode(bytes).into_string()
 }
 
+/// First/last 4 chars of base58, e.g. `Czfq..44zE`. Logs stay readable.
+pub fn short_pubkey(bytes: &[u8; 32]) -> String {
+    let s = encode_pubkey(bytes);
+    if s.len() <= 10 {
+        return s;
+    }
+    format!("{}..{}", &s[..4], &s[s.len() - 4..])
+}
+
 pub fn pubkey_from_slice(bytes: &[u8]) -> Option<[u8; 32]> {
     <[u8; 32]>::try_from(bytes).ok()
 }
