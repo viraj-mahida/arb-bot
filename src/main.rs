@@ -1,4 +1,4 @@
-use crate::adapters::{connect_grpc, ingest_pool_updates};
+use crate::adapters::{connect_grpc, ingest_pool_updates, RpcClient};
 use crate::core::{PoolCache, PoolRegistry};
 
 mod adapters;
@@ -14,7 +14,8 @@ async fn main() {
 
     let registry = PoolRegistry::sol_usdc_clmm();
     let cache = PoolCache::new();
+    let rpc = RpcClient::from_env();
 
     let (tx, stream) = connect_grpc(&registry).await.expect("failed to get stream");
-    ingest_pool_updates(stream, tx, &registry, &cache).await;
+    ingest_pool_updates(stream, tx, &registry, &cache, &rpc).await;
 }

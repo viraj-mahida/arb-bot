@@ -4,7 +4,7 @@ use futures::StreamExt;
 use yellowstone_grpc_client::{GeyserStream, SubscribeRequestSink};
 use yellowstone_grpc_proto::geyser::subscribe_update::UpdateOneof;
 
-use super::subscribe_accounts;
+use super::{subscribe_accounts, RpcClient};
 use crate::adapters::decoder::{decode_clmm_pool, decode_tick_array};
 use crate::core::{
     PoolCache, PoolRegistry, Venue, encode_pubkey, pubkey_from_slice, tick_arrays_around,
@@ -15,6 +15,7 @@ pub async fn ingest_pool_updates(
     mut tx: SubscribeRequestSink,
     registry: &PoolRegistry,
     cache: &PoolCache,
+    rpc: &RpcClient,
 ) {
     let mut subscribed: HashSet<String> = registry.subscribe_addresses().into_iter().collect();
 
@@ -57,6 +58,8 @@ pub async fn ingest_pool_updates(
                         {
                             eprintln!("failed to subscribe tick arrays: {e}");
                         }
+                        // Geyser only pushes later writes; RPC loads the current book once.
+                        hydrate_tick_arrays(rpc, cache, &fresh).await;
                     }
                     log_cache(cache);
                     continue;
@@ -82,6 +85,34 @@ pub async fn ingest_pool_updates(
             }
             Err(e) => eprintln!("stream error: {e}"),
         }
+    }
+}
+
+async fn hydrate_tick_arrays(rpc: &RpcClient, cache: &PoolCache, pubkeys: &[[u8; 32]]) {
+    let accounts = match rpc.get_multiple_accounts(pubkeys).await {
+        Ok(accounts) => accounts,
+        Err(e) => {
+            eprintln!("failed to hydrate tick arrays: {e}");
+            return;
+        }
+    };
+
+    for (pubkey, account) in pubkeys.iter().zip(accounts) {
+        let Some(account) = account else {
+            continue;
+        };
+        let Some(id) = cache.tick_array_ref(pubkey) else {
+            continue;
+        };
+        let Some(array) = decode_tick_array(&id, &account.data, account.slot, 0) else {
+            eprintln!(
+                "failed to decode {} tick array {} from rpc",
+                id.venue.as_str(),
+                encode_pubkey(pubkey)
+            );
+            continue;
+        };
+        cache.upsert_tick_array(array);
     }
 }
 
