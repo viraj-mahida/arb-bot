@@ -23,7 +23,7 @@ impl PoolCache {
             .insert(state.pubkey, state);
     }
 
-    #[allow(dead_code)] // quoting will look up by pubkey
+    #[allow(dead_code)] // swap ix building will look up by pubkey
     pub fn get(&self, pubkey: &[u8; 32]) -> Option<ClmmPoolState> {
         self.pools
             .read()

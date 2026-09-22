@@ -22,7 +22,7 @@ impl Venue {
 
 /// Venue-agnostic CLMM snapshot. Nearby tick arrays live on `PoolCache`.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // mint/vault/fee fields are for quoting next
+#[allow(dead_code)] // mint/vault are for swap ix building later
 pub struct ClmmPoolState {
     pub pubkey: [u8; 32],
     pub venue: Venue,
@@ -69,7 +69,6 @@ pub struct InitializedTick {
 
 /// Decoded tick-array snapshot, keyed on cache by `pubkey`.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // venue/slot used by quoting next
 pub struct TickArraySnapshot {
     pub pubkey: [u8; 32],
     pub pool: [u8; 32],

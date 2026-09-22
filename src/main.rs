@@ -1,8 +1,11 @@
 use crate::adapters::{RpcClient, connect_grpc, ingest_pool_updates};
 use crate::core::{PoolCache, PoolRegistry};
 
-mod adapters;
-mod core;
+pub(crate) mod adapters;
+pub(crate) mod core;
+
+#[cfg(test)]
+mod tests;
 
 #[tokio::main]
 async fn main() {

@@ -1,6 +1,6 @@
-mod bytes;
-mod orca_whirlpool;
-mod raydium_clmm;
+pub(crate) mod bytes;
+pub(crate) mod orca_whirlpool;
+pub(crate) mod raydium_clmm;
 
 use crate::core::{ClmmPoolState, PoolSpec, TickArrayRef, TickArraySnapshot, Venue};
 

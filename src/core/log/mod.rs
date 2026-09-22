@@ -1,5 +1,7 @@
 //! Educational stdout logs: *what* arrived, *why* we RPC, *what* the cache holds.
 
+mod quotes;
+
 use super::{
     ClmmPoolState, PoolCache, PoolRegistry, TickArraySnapshot, Venue, encode_pubkey, short_pubkey,
 };
@@ -12,7 +14,9 @@ pub fn startup(registry: &PoolRegistry) {
     println!("  2. Decoder turns bytes into pool state + tick arrays");
     println!("  3. RPC getMultipleAccounts loads the current tick-array book once");
     println!("     (Geyser does not replay history; it only pushes later writes)");
-    println!("  4. In-memory cache compares spot prices (fees/gas not applied yet)");
+    println!("  4. In-memory cache holds pool + nearby tick arrays");
+    println!("  5. Local compute_swap quotes a 0.1 SOL probe, then dual-walks both tick books for size");
+    println!("     (pool fees on; no gas/tip)");
     println!();
     println!("watching");
     for spec in registry.specs() {
@@ -32,6 +36,12 @@ pub fn startup(registry: &PoolRegistry) {
     println!("  [rpc/hydrate]   one-shot fetch of tick-array bytes we just subscribed to");
     println!(
         "  [snapshot]      both venues as cached right now; Δ = raydium − orca (USDC per SOL)"
+    );
+    println!(
+        "  [quote]         0.1 SOL sold on A, USDC bought back to SOL on B (local math, not a tx)"
+    );
+    println!(
+        "  [size]          dual-walk SOL-in (max local PnL from tick liquidity, still not a tx)"
     );
     println!();
 }
@@ -168,6 +178,7 @@ pub fn snapshot(cache: &PoolCache) {
             println!(
                 "  Δ raydium−orca = {delta:+.4} USDC/SOL  ({bps:+.2} bps of mid)  — raw spots, not a trade"
             );
+            quotes::log_quotes(cache);
         }
         _ => println!("  (need both venues in cache before a spread is printed)"),
     }
