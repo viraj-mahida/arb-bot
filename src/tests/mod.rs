@@ -1,6 +1,10 @@
-//! Unit tests, kept out of production modules so core logic stays readable.
+//! Unit tests, kept out of the step folders so the logic stays easy to read.
 //!
-//! Layout mirrors `src/` (`core/`, `adapters/`) so each area has its own file.
+//! The layout mirrors the steps. Each test name reads as the scenario it
+//! proves, and each test has a one-line doc saying what concept it checks.
 
-mod adapters;
-mod core;
+mod step_2_decode_account_bytes;
+mod step_3_store_latest_pool_state;
+mod step_4_quote_swaps;
+mod step_5_find_best_arbitrage_size;
+mod test_pool_builders;
