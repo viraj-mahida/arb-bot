@@ -42,11 +42,11 @@ pub fn max_pnl_sol_in(
 
     let mut sol_in: u64 = 0;
     for _ in 0..MAX_STEPS {
-        if sell.liq == 0 || buy.liq == 0 || !has_edge(&sell, &buy) {
+        if !has_edge(&sell, &buy) {
             break;
         }
-
-        let (sell_tick, sell_init) = sell.next_down();
+        
+        let (sell_tick, sell_init) = sell.next_down(); 
         let (buy_tick, buy_init) = buy.next_up();
         let sell_bound = tick_index_to_sqrt_price(sell_tick);
         let buy_bound = tick_index_to_sqrt_price(buy_tick);
