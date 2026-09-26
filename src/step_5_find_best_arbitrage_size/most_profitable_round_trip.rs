@@ -4,7 +4,9 @@ use super::find_input_amount_that_maximizes_profit;
 use crate::step_3_store_latest_pool_state::{
     ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks,
 };
-use crate::step_4_quote_swaps::{TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed, quote_two_pool_round_trip};
+use crate::step_4_quote_swaps::{
+    TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed, quote_two_pool_round_trip,
+};
 
 /// Size the round trip from both tick books, then quote it with each DEX's own math.
 ///
@@ -17,10 +19,20 @@ pub fn quote_most_profitable_two_pool_round_trip(
     buy_pool: &ConcentratedLiquidityPoolState,
     buy_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
 ) -> Result<TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed> {
-    let best_input_amount =
-        find_input_amount_that_maximizes_profit(sell_pool, sell_pool_tick_arrays, buy_pool, buy_pool_tick_arrays)?;
+    let best_input_amount = find_input_amount_that_maximizes_profit(
+        sell_pool,
+        sell_pool_tick_arrays,
+        buy_pool,
+        buy_pool_tick_arrays,
+    )?;
     if best_input_amount == 0 {
         return Err(WhySwapQuoteFailed::NoProfitablePriceGapAfterFees);
     }
-    quote_two_pool_round_trip(sell_pool, sell_pool_tick_arrays, buy_pool, buy_pool_tick_arrays, best_input_amount)
+    quote_two_pool_round_trip(
+        sell_pool,
+        sell_pool_tick_arrays,
+        buy_pool,
+        buy_pool_tick_arrays,
+        best_input_amount,
+    )
 }

@@ -17,12 +17,14 @@ pub fn parse_base58_public_key(base58_address: &str) -> PublicKeyBytes {
     let decoded_bytes = bs58::decode(base58_address)
         .into_vec()
         .unwrap_or_else(|error| panic!("invalid public key '{base58_address}': {error}"));
-    decoded_bytes.try_into().unwrap_or_else(|wrong_length: Vec<u8>| {
-        panic!(
-            "public key '{base58_address}' is {} bytes, expected 32",
-            wrong_length.len()
-        )
-    })
+    decoded_bytes
+        .try_into()
+        .unwrap_or_else(|wrong_length: Vec<u8>| {
+            panic!(
+                "public key '{base58_address}' is {} bytes, expected 32",
+                wrong_length.len()
+            )
+        })
 }
 
 /// Turn 32 raw bytes into the base58 string humans and RPC servers use.

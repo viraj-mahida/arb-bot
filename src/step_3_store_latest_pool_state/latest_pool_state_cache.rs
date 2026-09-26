@@ -49,7 +49,10 @@ impl LatestPoolStateCache {
         let mut pools = write_lock(&self.pool_state_by_pool_address);
         if let Some(existing) = pools.get(&pool_state.pool_address)
             && (existing.slot, existing.geyser_write_version_for_ordering)
-                > (pool_state.slot, pool_state.geyser_write_version_for_ordering)
+                > (
+                    pool_state.slot,
+                    pool_state.geyser_write_version_for_ordering,
+                )
         {
             return;
         }
@@ -58,8 +61,13 @@ impl LatestPoolStateCache {
 
     /// Look a pool up by its address. This is the lookup multi-pool code should use.
     #[allow(dead_code)] // used later when building swap instructions for a specific pool
-    pub fn pool_state_by_address(&self, pool_address: &PublicKeyBytes) -> Option<ConcentratedLiquidityPoolState> {
-        read_lock(&self.pool_state_by_pool_address).get(pool_address).cloned()
+    pub fn pool_state_by_address(
+        &self,
+        pool_address: &PublicKeyBytes,
+    ) -> Option<ConcentratedLiquidityPoolState> {
+        read_lock(&self.pool_state_by_pool_address)
+            .get(pool_address)
+            .cloned()
     }
 
     /// Any one pool owned by `dex`.
@@ -77,7 +85,10 @@ impl LatestPoolStateCache {
 
     /// Copies of every cached pool state.
     pub fn all_pool_states(&self) -> Vec<ConcentratedLiquidityPoolState> {
-        read_lock(&self.pool_state_by_pool_address).values().cloned().collect()
+        read_lock(&self.pool_state_by_pool_address)
+            .values()
+            .cloned()
+            .collect()
     }
 
     pub fn pool_count(&self) -> usize {
@@ -88,7 +99,10 @@ impl LatestPoolStateCache {
     ///
     /// Returns only the addresses that were *not* already watched, so the caller
     /// subscribes and fetches each tick array exactly once.
-    pub fn start_watching_tick_arrays(&self, tick_arrays: &[TickArrayPdaToWatch]) -> Vec<PublicKeyBytes> {
+    pub fn start_watching_tick_arrays(
+        &self,
+        tick_arrays: &[TickArrayPdaToWatch],
+    ) -> Vec<PublicKeyBytes> {
         let mut watched = write_lock(&self.watched_tick_array_by_address);
         let mut newly_watched_addresses = Vec::new();
         for &tick_array in tick_arrays {
@@ -104,7 +118,9 @@ impl LatestPoolStateCache {
 
     /// If `address` is a tick array we watch, what it belongs to.
     pub fn watched_tick_array(&self, address: &PublicKeyBytes) -> Option<TickArrayPdaToWatch> {
-        read_lock(&self.watched_tick_array_by_address).get(address).copied()
+        read_lock(&self.watched_tick_array_by_address)
+            .get(address)
+            .copied()
     }
 
     /// Store a tick array's contents, unless we already hold a newer write.
@@ -114,7 +130,8 @@ impl LatestPoolStateCache {
     pub fn save_tick_array(&self, tick_array: TickArrayAccountWithInitializedTicks) {
         let mut tick_arrays = write_lock(&self.tick_array_by_address);
         if let Some(existing) = tick_arrays.get(&tick_array.tick_array_address)
-            && existing.geyser_write_version_for_ordering > tick_array.geyser_write_version_for_ordering
+            && existing.geyser_write_version_for_ordering
+                > tick_array.geyser_write_version_for_ordering
         {
             return;
         }
@@ -122,7 +139,10 @@ impl LatestPoolStateCache {
     }
 
     /// Every cached tick array that belongs to `pool_address`.
-    pub fn tick_arrays_for_pool(&self, pool_address: &PublicKeyBytes) -> Vec<TickArrayAccountWithInitializedTicks> {
+    pub fn tick_arrays_for_pool(
+        &self,
+        pool_address: &PublicKeyBytes,
+    ) -> Vec<TickArrayAccountWithInitializedTicks> {
         read_lock(&self.tick_array_by_address)
             .values()
             .filter(|tick_array| tick_array.pool_address == *pool_address)
@@ -138,17 +158,28 @@ impl LatestPoolStateCache {
             .count()
     }
 
-    pub fn raydium_fee_rate_for_fee_config(&self, fee_config_address: &PublicKeyBytes) -> Option<u16> {
-        read_lock(&self.raydium_fee_rate_by_fee_config_address).get(fee_config_address).copied()
+    pub fn raydium_fee_rate_for_fee_config(
+        &self,
+        fee_config_address: &PublicKeyBytes,
+    ) -> Option<u16> {
+        read_lock(&self.raydium_fee_rate_by_fee_config_address)
+            .get(fee_config_address)
+            .copied()
     }
 
-    pub fn save_raydium_fee_rate_for_fee_config(&self, fee_config_address: PublicKeyBytes, fee_rate_in_millionths: u16) {
-        write_lock(&self.raydium_fee_rate_by_fee_config_address).insert(fee_config_address, fee_rate_in_millionths);
+    pub fn save_raydium_fee_rate_for_fee_config(
+        &self,
+        fee_config_address: PublicKeyBytes,
+        fee_rate_in_millionths: u16,
+    ) {
+        write_lock(&self.raydium_fee_rate_by_fee_config_address)
+            .insert(fee_config_address, fee_rate_in_millionths);
     }
 
     /// Call on every Geyser account message: remembers the newest slot and "now".
     pub fn record_stream_update(&self, slot: u64) {
-        self.newest_slot_seen_from_stream.fetch_max(slot, Ordering::Relaxed);
+        self.newest_slot_seen_from_stream
+            .fetch_max(slot, Ordering::Relaxed);
         *write_lock(&self.last_stream_update_received_at) = Some(Instant::now());
     }
 
@@ -166,9 +197,11 @@ impl LatestPoolStateCache {
 // A "poisoned" lock means another thread panicked while holding it; the data
 // may be half-written, so crashing loudly is safer than trading on it.
 fn read_lock<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
-    lock.read().expect("cache lock poisoned by a panic in another thread")
+    lock.read()
+        .expect("cache lock poisoned by a panic in another thread")
 }
 
 fn write_lock<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
-    lock.write().expect("cache lock poisoned by a panic in another thread")
+    lock.write()
+        .expect("cache lock poisoned by a panic in another thread")
 }

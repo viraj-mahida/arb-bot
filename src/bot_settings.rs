@@ -90,7 +90,10 @@ impl BotSettingsFromEnvironment {
             send_real_transactions: read_bool("SEND_TRANSACTIONS", false),
             max_trade_input_lamports: read_number("MAX_TRADE_INPUT_LAMPORTS", 1_000_000_000),
             min_profit_after_costs_lamports: read_number("MIN_PROFIT_LAMPORTS", 10_000),
-            priority_fee_micro_lamports_per_compute_unit: read_number("PRIORITY_FEE_MICROLAMPORTS_PER_CU", 10_000),
+            priority_fee_micro_lamports_per_compute_unit: read_number(
+                "PRIORITY_FEE_MICROLAMPORTS_PER_CU",
+                10_000,
+            ),
             compute_unit_limit: read_number("COMPUTE_UNIT_LIMIT", 400_000),
             jito_block_engine_url: match std::env::var("JITO_BLOCK_ENGINE_URL") {
                 Ok(url) if url.trim().is_empty() => None,
@@ -123,7 +126,10 @@ impl BotSettingsFromEnvironment {
 }
 
 fn read_text(name: &str) -> Option<String> {
-    std::env::var(name).ok().map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn read_number<T: std::str::FromStr>(name: &str, default: T) -> T {
@@ -146,6 +152,7 @@ fn read_bool(name: &str, default: bool) -> bool {
 }
 
 fn read_required_public_key(name: &str) -> PublicKeyBytes {
-    let text = read_text(name).unwrap_or_else(|| panic!("{name} is required when FUNDING_MODE=flash_loan"));
+    let text = read_text(name)
+        .unwrap_or_else(|| panic!("{name} is required when FUNDING_MODE=flash_loan"));
     parse_base58_public_key(&text)
 }

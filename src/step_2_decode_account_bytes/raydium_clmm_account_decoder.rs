@@ -5,12 +5,13 @@
 //! account, which is the start of the 8-byte Anchor discriminator.
 
 use super::read_little_endian_numbers::{
-    read_i128_little_endian, read_i32_little_endian, read_public_key, read_u128_little_endian,
-    read_u16_little_endian,
+    read_i32_little_endian, read_i128_little_endian, read_public_key, read_u16_little_endian,
+    read_u128_little_endian,
 };
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, DexProgram, DexSpecificSwapAccounts, InitializedTickWithLiquidityChange,
-    TickArrayAccountWithInitializedTicks, TickArrayPdaToWatch, WatchedPoolConfig,
+    ConcentratedLiquidityPoolState, DexProgram, DexSpecificSwapAccounts,
+    InitializedTickWithLiquidityChange, TickArrayAccountWithInitializedTicks, TickArrayPdaToWatch,
+    WatchedPoolConfig,
 };
 
 // ── PoolState (pool) account ──────────────────────────────────────────────
@@ -67,13 +68,22 @@ pub fn decode_raydium_pool_account(
         token_a_decimals: *account_data.get(RAYDIUM_POOL_TOKEN_A_DECIMALS_AT_BYTE)?,
         token_b_decimals: *account_data.get(RAYDIUM_POOL_TOKEN_B_DECIMALS_AT_BYTE)?,
         tick_spacing: read_u16_little_endian(account_data, RAYDIUM_POOL_TICK_SPACING_AT_BYTE)?,
-        active_liquidity_at_current_price: read_u128_little_endian(account_data, RAYDIUM_POOL_LIQUIDITY_AT_BYTE)?,
+        active_liquidity_at_current_price: read_u128_little_endian(
+            account_data,
+            RAYDIUM_POOL_LIQUIDITY_AT_BYTE,
+        )?,
         sqrt_price_q64_64: read_u128_little_endian(account_data, RAYDIUM_POOL_SQRT_PRICE_AT_BYTE)?,
-        current_tick_index: read_i32_little_endian(account_data, RAYDIUM_POOL_CURRENT_TICK_AT_BYTE)?,
+        current_tick_index: read_i32_little_endian(
+            account_data,
+            RAYDIUM_POOL_CURRENT_TICK_AT_BYTE,
+        )?,
         fee_rate_in_millionths: pool_config.fee_rate_in_millionths(),
         dex_specific_swap_accounts: DexSpecificSwapAccounts::RaydiumClmm {
             fee_config_address: read_public_key(account_data, RAYDIUM_POOL_FEE_CONFIG_AT_BYTE)?,
-            price_observation_address: read_public_key(account_data, RAYDIUM_POOL_PRICE_OBSERVATION_AT_BYTE)?,
+            price_observation_address: read_public_key(
+                account_data,
+                RAYDIUM_POOL_PRICE_OBSERVATION_AT_BYTE,
+            )?,
         },
         slot,
         geyser_write_version_for_ordering: geyser_write_version,
@@ -96,7 +106,9 @@ const RAYDIUM_FEE_CONFIG_TRADE_FEE_RATE_AT_BYTE: usize = 47;
 /// Returns `None` if the bytes are too short or the fee does not fit the
 /// shared `u16` field (a fee above 6.5% would be a sign of a wrong account).
 pub fn decode_raydium_fee_config_trade_fee_rate(account_data: &[u8]) -> Option<u16> {
-    let bytes = account_data.get(RAYDIUM_FEE_CONFIG_TRADE_FEE_RATE_AT_BYTE..RAYDIUM_FEE_CONFIG_TRADE_FEE_RATE_AT_BYTE + 4)?;
+    let bytes = account_data.get(
+        RAYDIUM_FEE_CONFIG_TRADE_FEE_RATE_AT_BYTE..RAYDIUM_FEE_CONFIG_TRADE_FEE_RATE_AT_BYTE + 4,
+    )?;
     u16::try_from(u32::from_le_bytes(bytes.try_into().ok()?)).ok()
 }
 
@@ -128,7 +140,8 @@ const RAYDIUM_TICK_SLOT_LIQUIDITY_NET_OFFSET: usize = 4;
 const RAYDIUM_TICK_SLOT_LIQUIDITY_GROSS_OFFSET: usize = 20;
 /// Smallest account size that still contains all 60 tick slots.
 pub(crate) const RAYDIUM_TICK_ARRAY_MINIMUM_SIZE_IN_BYTES: usize =
-    RAYDIUM_TICK_ARRAY_FIRST_TICK_SLOT_AT_BYTE + RAYDIUM_TICK_SLOT_SIZE_IN_BYTES * RAYDIUM_TICK_SLOTS_PER_ARRAY;
+    RAYDIUM_TICK_ARRAY_FIRST_TICK_SLOT_AT_BYTE
+        + RAYDIUM_TICK_SLOT_SIZE_IN_BYTES * RAYDIUM_TICK_SLOTS_PER_ARRAY;
 
 pub fn decode_raydium_tick_array_account(
     watched_tick_array: &TickArrayPdaToWatch,
@@ -145,21 +158,30 @@ pub fn decode_raydium_tick_array_account(
         return None;
     }
     // Guards against a wrong PDA: the array must say it belongs to the pool we expect.
-    if read_public_key(account_data, RAYDIUM_TICK_ARRAY_POOL_ADDRESS_AT_BYTE)? != watched_tick_array.pool_address {
+    if read_public_key(account_data, RAYDIUM_TICK_ARRAY_POOL_ADDRESS_AT_BYTE)?
+        != watched_tick_array.pool_address
+    {
         return None;
     }
 
-    let start_tick_index = read_i32_little_endian(account_data, RAYDIUM_TICK_ARRAY_START_TICK_AT_BYTE)?;
+    let start_tick_index =
+        read_i32_little_endian(account_data, RAYDIUM_TICK_ARRAY_START_TICK_AT_BYTE)?;
     let mut initialized_ticks = Vec::new();
     for slot_position in 0..RAYDIUM_TICK_SLOTS_PER_ARRAY {
-        let slot_start = RAYDIUM_TICK_ARRAY_FIRST_TICK_SLOT_AT_BYTE + slot_position * RAYDIUM_TICK_SLOT_SIZE_IN_BYTES;
-        let liquidity_gross =
-            read_u128_little_endian(account_data, slot_start + RAYDIUM_TICK_SLOT_LIQUIDITY_GROSS_OFFSET)?;
+        let slot_start = RAYDIUM_TICK_ARRAY_FIRST_TICK_SLOT_AT_BYTE
+            + slot_position * RAYDIUM_TICK_SLOT_SIZE_IN_BYTES;
+        let liquidity_gross = read_u128_little_endian(
+            account_data,
+            slot_start + RAYDIUM_TICK_SLOT_LIQUIDITY_GROSS_OFFSET,
+        )?;
         if liquidity_gross == 0 {
             continue;
         }
         initialized_ticks.push(InitializedTickWithLiquidityChange {
-            tick_index: read_i32_little_endian(account_data, slot_start + RAYDIUM_TICK_SLOT_TICK_INDEX_OFFSET)?,
+            tick_index: read_i32_little_endian(
+                account_data,
+                slot_start + RAYDIUM_TICK_SLOT_TICK_INDEX_OFFSET,
+            )?,
             liquidity_added_when_price_crosses_upward: read_i128_little_endian(
                 account_data,
                 slot_start + RAYDIUM_TICK_SLOT_LIQUIDITY_NET_OFFSET,

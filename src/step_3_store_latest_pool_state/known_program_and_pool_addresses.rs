@@ -13,8 +13,7 @@ pub const RAYDIUM_CLMM_PROGRAM_ADDRESS: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VT
 pub const ORCA_WHIRLPOOL_PROGRAM_ADDRESS: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 
 /// Raydium CLMM pool trading SOL (token A) against USDC (token B).
-pub const RAYDIUM_CLMM_SOL_USDC_POOL_ADDRESS: &str =
-    "3ucNos4NbumPLZNWztqGHNFFgkHeRMBQAVemeeomsUxv";
+pub const RAYDIUM_CLMM_SOL_USDC_POOL_ADDRESS: &str = "3ucNos4NbumPLZNWztqGHNFFgkHeRMBQAVemeeomsUxv";
 /// Orca Whirlpool pool trading SOL (token A) against USDC (token B).
 pub const ORCA_WHIRLPOOL_SOL_USDC_POOL_ADDRESS: &str =
     "Czfq3xZZDmsdGdUyrNLtRhGc47cXcZtLG4crryfu44zE";

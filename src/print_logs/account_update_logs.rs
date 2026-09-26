@@ -1,8 +1,8 @@
 //! Lines printed while processing Geyser updates and RPC loads.
 
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, DexProgram, PublicKeyBytes, TickArrayAccountWithInitializedTicks,
-    encode_public_key_as_base58, shorten_public_key_for_logs,
+    ConcentratedLiquidityPoolState, DexProgram, PublicKeyBytes,
+    TickArrayAccountWithInitializedTicks, encode_public_key_as_base58, shorten_public_key_for_logs,
 };
 
 pub fn pool_account_updated(
@@ -48,7 +48,12 @@ pub fn rpc_tick_array_load_started(tick_array_count: usize) {
     );
 }
 
-pub fn rpc_tick_array_load_finished(decoded: usize, requested: usize, missing_on_chain: usize, failed: usize) {
+pub fn rpc_tick_array_load_finished(
+    decoded: usize,
+    requested: usize,
+    missing_on_chain: usize,
+    failed: usize,
+) {
     println!(
         "[rpc/tick-array]  decoded {decoded}/{requested}  not_on_chain={missing_on_chain}  decode_failed={failed}"
     );
@@ -63,10 +68,17 @@ pub fn tick_array_subscribe_failed(error: impl std::fmt::Display) {
 }
 
 pub fn pool_decode_failed(dex: DexProgram, pool_address_base58: &str) {
-    eprintln!("[error] could not decode {} pool {pool_address_base58}", dex.name());
+    eprintln!(
+        "[error] could not decode {} pool {pool_address_base58}",
+        dex.name()
+    );
 }
 
-pub fn tick_array_decode_failed(dex: DexProgram, tick_array_address: &PublicKeyBytes, came_from_rpc: bool) {
+pub fn tick_array_decode_failed(
+    dex: DexProgram,
+    tick_array_address: &PublicKeyBytes,
+    came_from_rpc: bool,
+) {
     let source = if came_from_rpc { " (from RPC)" } else { "" };
     eprintln!(
         "[error] could not decode {} tick array {}{source}",

@@ -72,11 +72,16 @@ pub(crate) fn tick_array_start_indices_near_tick(
     if ticks_covered_by_one_array == 0 {
         return Vec::new();
     }
-    let current_start = tick_array_start_index_containing_tick(tick_index, ticks_covered_by_one_array);
-    let lowest_possible_start =
-        tick_array_start_index_containing_tick(LOWEST_ALLOWED_TICK_INDEX, ticks_covered_by_one_array);
-    let highest_possible_start =
-        tick_array_start_index_containing_tick(HIGHEST_ALLOWED_TICK_INDEX, ticks_covered_by_one_array);
+    let current_start =
+        tick_array_start_index_containing_tick(tick_index, ticks_covered_by_one_array);
+    let lowest_possible_start = tick_array_start_index_containing_tick(
+        LOWEST_ALLOWED_TICK_INDEX,
+        ticks_covered_by_one_array,
+    );
+    let highest_possible_start = tick_array_start_index_containing_tick(
+        HIGHEST_ALLOWED_TICK_INDEX,
+        ticks_covered_by_one_array,
+    );
     (-TICK_ARRAYS_TO_WATCH_ON_EACH_SIDE..=TICK_ARRAYS_TO_WATCH_ON_EACH_SIDE)
         .map(|offset| current_start + offset * ticks_covered_by_one_array)
         // Near the extreme ends of the price range, neighbours would not exist on-chain.
@@ -90,7 +95,10 @@ pub(crate) fn tick_array_start_indices_near_tick(
 /// integer division (which rounds toward zero). With 88-tick windows:
 /// - tick 5 → window 0..87 → start 0
 /// - tick -1 → window -88..-1 → start -88 (plain `/` would wrongly give 0)
-pub fn tick_array_start_index_containing_tick(tick_index: i32, ticks_covered_by_one_array: i32) -> i32 {
+pub fn tick_array_start_index_containing_tick(
+    tick_index: i32,
+    ticks_covered_by_one_array: i32,
+) -> i32 {
     tick_index.div_euclid(ticks_covered_by_one_array) * ticks_covered_by_one_array
 }
 
@@ -115,11 +123,19 @@ pub(crate) fn derive_tick_array_pda_address(
     let seeds: [&[u8]; 3] = match dex {
         DexProgram::OrcaWhirlpool => {
             start_tick_as_decimal_text = start_tick_index.to_string();
-            [b"tick_array", pool_address.as_ref(), start_tick_as_decimal_text.as_bytes()]
+            [
+                b"tick_array",
+                pool_address.as_ref(),
+                start_tick_as_decimal_text.as_bytes(),
+            ]
         }
         DexProgram::RaydiumClmm => {
             start_tick_as_big_endian_bytes = start_tick_index.to_be_bytes();
-            [b"tick_array", pool_address.as_ref(), &start_tick_as_big_endian_bytes]
+            [
+                b"tick_array",
+                pool_address.as_ref(),
+                &start_tick_as_big_endian_bytes,
+            ]
         }
     };
     // The second value is the "bump" byte that keeps the address off the ed25519 curve; we don't need it.

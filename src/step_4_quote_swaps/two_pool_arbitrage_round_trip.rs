@@ -9,9 +9,13 @@
 //! trade started from USDC instead of SOL. We start from SOL (token A).
 
 use super::quote_swap_exact_input::quote_swap_exact_input;
-use super::swap_quote_types::{SwapDirection, TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed};
+use super::swap_quote_types::{
+    DirectedRoundTripQuote, PROBE_TRADE_INPUT_AMOUNT, SwapDirection, TwoPoolArbitrageRoundTrip,
+    WhySwapQuoteFailed,
+};
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks,
+    ConcentratedLiquidityPoolState, DexProgram, LatestPoolStateCache,
+    TickArrayAccountWithInitializedTicks,
 };
 
 /// Quote selling `start_token_amount_in` of token A on `sell_pool`, then
@@ -44,4 +48,80 @@ pub fn quote_two_pool_round_trip(
         both_swaps_fully_filled: sell_leg.input_amount_used == start_token_amount_in
             && buy_leg.input_amount_used == sell_leg.output_amount,
     })
+}
+
+/// The two SOL/USDC pools this bot watches, plus the tick arrays cached for each.
+///
+/// `None` until both DEXes have appeared in the cache.
+pub(crate) struct CachedOrcaAndRaydiumPools {
+    pub raydium_pool: ConcentratedLiquidityPoolState,
+    pub raydium_tick_arrays: Vec<TickArrayAccountWithInitializedTicks>,
+    pub orca_pool: ConcentratedLiquidityPoolState,
+    pub orca_tick_arrays: Vec<TickArrayAccountWithInitializedTicks>,
+}
+
+impl CachedOrcaAndRaydiumPools {
+    pub(crate) fn from_cache(cache: &LatestPoolStateCache) -> Option<Self> {
+        let raydium_pool = cache.first_pool_on_dex(DexProgram::RaydiumClmm)?;
+        let orca_pool = cache.first_pool_on_dex(DexProgram::OrcaWhirlpool)?;
+        Some(Self {
+            raydium_tick_arrays: cache.tick_arrays_for_pool(&raydium_pool.pool_address),
+            orca_tick_arrays: cache.tick_arrays_for_pool(&orca_pool.pool_address),
+            raydium_pool,
+            orca_pool,
+        })
+    }
+
+    /// Quote raydium→orca and orca→raydium. At most one direction can be profitable.
+    pub(crate) fn quote_both_directions(
+        &self,
+        mut quote: impl FnMut(
+            &ConcentratedLiquidityPoolState,
+            &[TickArrayAccountWithInitializedTicks],
+            &ConcentratedLiquidityPoolState,
+            &[TickArrayAccountWithInitializedTicks],
+        ) -> Result<TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed>,
+    ) -> [DirectedRoundTripQuote; 2] {
+        [
+            DirectedRoundTripQuote {
+                sell_pool_dex: self.raydium_pool.dex,
+                buy_pool_dex: self.orca_pool.dex,
+                result: quote(
+                    &self.raydium_pool,
+                    &self.raydium_tick_arrays,
+                    &self.orca_pool,
+                    &self.orca_tick_arrays,
+                ),
+            },
+            DirectedRoundTripQuote {
+                sell_pool_dex: self.orca_pool.dex,
+                buy_pool_dex: self.raydium_pool.dex,
+                result: quote(
+                    &self.orca_pool,
+                    &self.orca_tick_arrays,
+                    &self.raydium_pool,
+                    &self.raydium_tick_arrays,
+                ),
+            },
+        ]
+    }
+}
+
+/// Round trips at the small fixed probe size, both directions.
+pub fn quote_probe_round_trips_from_cache(
+    cache: &LatestPoolStateCache,
+) -> Option<[DirectedRoundTripQuote; 2]> {
+    Some(
+        CachedOrcaAndRaydiumPools::from_cache(cache)?.quote_both_directions(
+            |sell_pool, sell_tick_arrays, buy_pool, buy_tick_arrays| {
+                quote_two_pool_round_trip(
+                    sell_pool,
+                    sell_tick_arrays,
+                    buy_pool,
+                    buy_tick_arrays,
+                    PROBE_TRADE_INPUT_AMOUNT,
+                )
+            },
+        ),
+    )
 }

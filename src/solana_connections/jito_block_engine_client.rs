@@ -35,7 +35,10 @@ impl JitoBlockEngineClient {
             .timeout(JITO_REQUEST_TIMEOUT)
             .build()
             .expect("failed to build HTTP client for Jito");
-        Self { bundles_url: format!("{block_engine_url}/api/v1/bundles"), http_client }
+        Self {
+            bundles_url: format!("{block_engine_url}/api/v1/bundles"),
+            http_client,
+        }
     }
 
     pub async fn get_tip_accounts(&self) -> Result<Vec<PublicKeyBytes>, String> {
@@ -56,8 +59,13 @@ impl JitoBlockEngineClient {
         .await
     }
 
-    async fn call<T: DeserializeOwned>(&self, method: &str, params: serde_json::Value) -> Result<T, String> {
-        let request = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
+    async fn call<T: DeserializeOwned>(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<T, String> {
+        let request =
+            serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
         let response: JitoResponse<T> = self
             .http_client
             .post(&self.bundles_url)
@@ -71,7 +79,9 @@ impl JitoBlockEngineClient {
         if let Some(error) = response.error {
             return Err(format!("jito {method}: {error}"));
         }
-        response.result.ok_or_else(|| format!("jito {method}: response missing result"))
+        response
+            .result
+            .ok_or_else(|| format!("jito {method}: response missing result"))
     }
 }
 

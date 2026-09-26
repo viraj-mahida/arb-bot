@@ -125,10 +125,11 @@ pub(super) fn bridge_amount_until_price_gap_closes(
     }
     let buy_pool_fee_kept = fraction_of_input_left_after_fee(buy_pool.fee_rate_in_millionths);
     let square_root_of_both_fees_kept =
-        (fraction_of_input_left_after_fee(sell_pool.fee_rate_in_millionths) * buy_pool_fee_kept).sqrt();
+        (fraction_of_input_left_after_fee(sell_pool.fee_rate_in_millionths) * buy_pool_fee_kept)
+            .sqrt();
 
-    let price_gap_after_fees =
-        square_root_of_both_fees_kept * sell_pool.sqrt_price_q64_64 as f64 - buy_pool.sqrt_price_q64_64 as f64;
+    let price_gap_after_fees = square_root_of_both_fees_kept * sell_pool.sqrt_price_q64_64 as f64
+        - buy_pool.sqrt_price_q64_64 as f64;
     if price_gap_after_fees <= 0.0 {
         return 0;
     }
@@ -184,7 +185,8 @@ pub(super) fn move_both_pool_prices_by_bridge_amount(
     .ok()?;
     // The sell pool also takes its fee from our SOL, so we must send slightly more.
     let start_token_including_fee =
-        try_reverse_apply_swap_fee(start_token_reaching_curve, sell_pool.fee_rate_in_millionths).ok()?;
+        try_reverse_apply_swap_fee(start_token_reaching_curve, sell_pool.fee_rate_in_millionths)
+            .ok()?;
 
     sell_pool.sqrt_price_q64_64 = sell_pool_new_sqrt_price;
     sell_pool.current_tick_index = sqrt_price_to_tick_index(sell_pool_new_sqrt_price);
@@ -212,7 +214,10 @@ pub(super) fn token_b_amount_between_sqrt_prices(
 ///
 /// `after = before * k`, so `before = after / k = after * 1,000,000 / (1,000,000 − fee)`.
 /// Rounded up: being one unit short would fail on-chain.
-pub(super) fn amount_before_fee_was_taken(amount_after_fee: u64, fee_rate_in_millionths: u32) -> u64 {
+pub(super) fn amount_before_fee_was_taken(
+    amount_after_fee: u64,
+    fee_rate_in_millionths: u32,
+) -> u64 {
     try_reverse_apply_swap_fee(amount_after_fee, fee_rate_in_millionths).unwrap_or(u64::MAX)
 }
 

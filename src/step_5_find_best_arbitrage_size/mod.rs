@@ -46,6 +46,7 @@
 mod concentrated_liquidity_formulas;
 mod most_profitable_round_trip;
 mod pool_price_walker_along_ticks;
+mod watched_pair_round_trips;
 
 use orca_whirlpools_core::tick_index_to_sqrt_price;
 
@@ -54,11 +55,15 @@ use crate::step_3_store_latest_pool_state::{
 };
 use crate::step_4_quote_swaps::{SwapDirection, WhySwapQuoteFailed};
 use concentrated_liquidity_formulas::{
-    amount_before_fee_was_taken, bridge_amount_until_price_gap_closes, is_price_gap_bigger_than_both_fees,
-    move_both_pool_prices_by_bridge_amount, token_b_amount_between_sqrt_prices,
+    amount_before_fee_was_taken, bridge_amount_until_price_gap_closes,
+    is_price_gap_bigger_than_both_fees, move_both_pool_prices_by_bridge_amount,
+    token_b_amount_between_sqrt_prices,
 };
 pub use most_profitable_round_trip::quote_most_profitable_two_pool_round_trip;
 use pool_price_walker_along_ticks::PoolPriceWalkerAlongTicks;
+pub use watched_pair_round_trips::{
+    WatchedPairRoundTripQuotes, quote_watched_orca_and_raydium_pair,
+};
 
 /// Safety cap on walk steps, so malformed tick data can never loop forever.
 /// Each step crosses at least one tick, and we only cache ~5 tick arrays, so
@@ -105,21 +110,28 @@ pub fn find_input_amount_that_maximizes_profit(
         // Buying token A pushes the buy pool's price UP toward its next tick above.
         let sell_pool_next_tick = sell_pool.next_initialized_tick_below_price();
         let buy_pool_next_tick = buy_pool.next_initialized_tick_above_price();
-        let sell_pool_next_tick_sqrt_price = tick_index_to_sqrt_price(sell_pool_next_tick.tick_index);
+        let sell_pool_next_tick_sqrt_price =
+            tick_index_to_sqrt_price(sell_pool_next_tick.tick_index);
         let buy_pool_next_tick_sqrt_price = tick_index_to_sqrt_price(buy_pool_next_tick.tick_index);
 
         // If a price already sits exactly on its next boundary, cross it first
         // (or stop, if the boundary is just the edge of the data we cached).
         if sell_pool_next_tick_sqrt_price >= sell_pool.sqrt_price_q64_64 {
             if sell_pool_next_tick.is_initialized_tick {
-                sell_pool.cross_tick_and_update_liquidity(sell_pool_next_tick.tick_index, SwapDirection::TokenAToTokenB);
+                sell_pool.cross_tick_and_update_liquidity(
+                    sell_pool_next_tick.tick_index,
+                    SwapDirection::TokenAToTokenB,
+                );
                 continue;
             }
             break;
         }
         if buy_pool_next_tick_sqrt_price <= buy_pool.sqrt_price_q64_64 {
             if buy_pool_next_tick.is_initialized_tick {
-                buy_pool.cross_tick_and_update_liquidity(buy_pool_next_tick.tick_index, SwapDirection::TokenBToTokenA);
+                buy_pool.cross_tick_and_update_liquidity(
+                    buy_pool_next_tick.tick_index,
+                    SwapDirection::TokenBToTokenA,
+                );
                 continue;
             }
             break;
@@ -135,18 +147,20 @@ pub fn find_input_amount_that_maximizes_profit(
             sell_pool.active_liquidity,
             false,
         );
-        let bridge_amount_after_fee_until_buy_pool_hits_next_tick = token_b_amount_between_sqrt_prices(
-            buy_pool.sqrt_price_q64_64,
-            buy_pool_next_tick_sqrt_price,
-            buy_pool.active_liquidity,
-            true,
-        );
+        let bridge_amount_after_fee_until_buy_pool_hits_next_tick =
+            token_b_amount_between_sqrt_prices(
+                buy_pool.sqrt_price_q64_64,
+                buy_pool_next_tick_sqrt_price,
+                buy_pool.active_liquidity,
+                true,
+            );
         // The buy pool takes its fee first, so we must send a bit more than the curve needs.
         let bridge_amount_until_buy_pool_hits_next_tick = amount_before_fee_was_taken(
             bridge_amount_after_fee_until_buy_pool_hits_next_tick,
             buy_pool.fee_rate_in_millionths,
         );
-        let bridge_amount_until_price_gap_is_gone = bridge_amount_until_price_gap_closes(&sell_pool, &buy_pool);
+        let bridge_amount_until_price_gap_is_gone =
+            bridge_amount_until_price_gap_closes(&sell_pool, &buy_pool);
 
         // Take the smallest positive distance: that event happens first.
         let bridge_amount_this_step = [
@@ -162,12 +176,15 @@ pub fn find_input_amount_that_maximizes_profit(
             break;
         }
 
-        let Some(start_token_input_this_step) =
-            move_both_pool_prices_by_bridge_amount(&mut sell_pool, &mut buy_pool, bridge_amount_this_step)
-        else {
+        let Some(start_token_input_this_step) = move_both_pool_prices_by_bridge_amount(
+            &mut sell_pool,
+            &mut buy_pool,
+            bridge_amount_this_step,
+        ) else {
             break;
         };
-        total_start_token_input = total_start_token_input.saturating_add(start_token_input_this_step);
+        total_start_token_input =
+            total_start_token_input.saturating_add(start_token_input_this_step);
         if total_start_token_input == u64::MAX {
             break;
         }
@@ -177,8 +194,10 @@ pub fn find_input_amount_that_maximizes_profit(
                 && bridge_amount_this_step == bridge_amount_until_price_gap_is_gone
                 && bridge_amount_this_step < bridge_amount_until_sell_pool_hits_next_tick
                 && bridge_amount_this_step < bridge_amount_until_buy_pool_hits_next_tick,
-            sell_pool_reached_next_tick: bridge_amount_this_step == bridge_amount_until_sell_pool_hits_next_tick,
-            buy_pool_reached_next_tick: bridge_amount_this_step == bridge_amount_until_buy_pool_hits_next_tick,
+            sell_pool_reached_next_tick: bridge_amount_this_step
+                == bridge_amount_until_sell_pool_hits_next_tick,
+            buy_pool_reached_next_tick: bridge_amount_this_step
+                == bridge_amount_until_buy_pool_hits_next_tick,
         };
 
         if what_stopped_this_step.price_gap_after_fees_is_gone {
@@ -188,14 +207,20 @@ pub fn find_input_amount_that_maximizes_profit(
         // tick) means we do not know the liquidity beyond it, so we stop there.
         if what_stopped_this_step.sell_pool_reached_next_tick {
             if sell_pool_next_tick.is_initialized_tick {
-                sell_pool.cross_tick_and_update_liquidity(sell_pool_next_tick.tick_index, SwapDirection::TokenAToTokenB);
+                sell_pool.cross_tick_and_update_liquidity(
+                    sell_pool_next_tick.tick_index,
+                    SwapDirection::TokenAToTokenB,
+                );
             } else {
                 break;
             }
         }
         if what_stopped_this_step.buy_pool_reached_next_tick {
             if buy_pool_next_tick.is_initialized_tick {
-                buy_pool.cross_tick_and_update_liquidity(buy_pool_next_tick.tick_index, SwapDirection::TokenBToTokenA);
+                buy_pool.cross_tick_and_update_liquidity(
+                    buy_pool_next_tick.tick_index,
+                    SwapDirection::TokenBToTokenA,
+                );
             } else {
                 break;
             }

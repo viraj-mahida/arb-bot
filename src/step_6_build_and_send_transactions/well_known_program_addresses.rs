@@ -18,7 +18,8 @@ pub const TOKEN_PROGRAM_ADDRESS: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623V
 /// The newer Token-2022 program. Raydium's `swap_v2` asks for it even when both tokens use the classic one.
 pub const TOKEN_2022_PROGRAM_ADDRESS: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 /// Computes and creates each wallet's default token account for a mint.
-pub const ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ADDRESS: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+pub const ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ADDRESS: &str =
+    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 /// Memo program; `swap_v2` on both DEXes lists it (used for Token-2022 transfer memos).
 pub const MEMO_PROGRAM_ADDRESS: &str = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 /// Lets a transaction request more compute units and set its priority fee.

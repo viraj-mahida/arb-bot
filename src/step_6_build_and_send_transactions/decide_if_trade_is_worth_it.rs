@@ -55,11 +55,17 @@ impl TradeDecisionRules {
             max_trade_input_lamports: settings.max_trade_input_lamports,
             min_profit_after_costs_lamports: settings.min_profit_after_costs_lamports,
             max_pool_state_age_in_slots: settings.max_pool_state_age_in_slots,
-            max_milliseconds_since_last_stream_update: settings.max_milliseconds_since_last_stream_update,
+            max_milliseconds_since_last_stream_update: settings
+                .max_milliseconds_since_last_stream_update,
             slippage_tolerance_in_basis_points: settings.slippage_tolerance_in_basis_points,
             compute_unit_limit: settings.compute_unit_limit,
-            priority_fee_micro_lamports_per_compute_unit: settings.priority_fee_micro_lamports_per_compute_unit,
-            jito_tip_lamports: if settings.jito_block_engine_url.is_some() { settings.jito_tip_lamports } else { 0 },
+            priority_fee_micro_lamports_per_compute_unit: settings
+                .priority_fee_micro_lamports_per_compute_unit,
+            jito_tip_lamports: if settings.jito_block_engine_url.is_some() {
+                settings.jito_tip_lamports
+            } else {
+                0
+            },
             flash_loan_fee_in_basis_points: settings.flash_loan_fee_in_basis_points(),
         }
     }
@@ -87,13 +93,19 @@ impl EstimatedTransactionCosts {
 ///
 /// Fractions of a lamport are rounded *up*: over-estimating a cost can only
 /// make us skip a trade, under-estimating could make us lose money.
-pub fn estimate_transaction_costs(rules: &TradeDecisionRules, start_token_amount_in: u64) -> EstimatedTransactionCosts {
-    let priority_fee_micro_lamports =
-        u128::from(rules.compute_unit_limit) * u128::from(rules.priority_fee_micro_lamports_per_compute_unit);
-    let flash_loan_fee_scaled = u128::from(start_token_amount_in) * u128::from(rules.flash_loan_fee_in_basis_points);
+pub fn estimate_transaction_costs(
+    rules: &TradeDecisionRules,
+    start_token_amount_in: u64,
+) -> EstimatedTransactionCosts {
+    let priority_fee_micro_lamports = u128::from(rules.compute_unit_limit)
+        * u128::from(rules.priority_fee_micro_lamports_per_compute_unit);
+    let flash_loan_fee_scaled =
+        u128::from(start_token_amount_in) * u128::from(rules.flash_loan_fee_in_basis_points);
     EstimatedTransactionCosts {
         network_signature_fee: LAMPORTS_PER_SIGNATURE * SIGNATURES_PER_TRANSACTION,
-        priority_fee: saturate_to_u64(priority_fee_micro_lamports.div_ceil(MICRO_LAMPORTS_PER_LAMPORT)),
+        priority_fee: saturate_to_u64(
+            priority_fee_micro_lamports.div_ceil(MICRO_LAMPORTS_PER_LAMPORT),
+        ),
         jito_tip: rules.jito_tip_lamports,
         flash_loan_fee: saturate_to_u64(flash_loan_fee_scaled.div_ceil(BASIS_POINTS_PER_WHOLE)),
     }
@@ -137,12 +149,20 @@ pub struct ApprovedArbitrageTrade {
 #[derive(Debug)]
 pub enum WhyTradeWasSkipped {
     NoStreamUpdateYet,
-    StreamSilentTooLong { milliseconds_since_last_update: u64 },
-    PoolStateTooOld { dex: DexProgram, age_in_slots: u64 },
+    StreamSilentTooLong {
+        milliseconds_since_last_update: u64,
+    },
+    PoolStateTooOld {
+        dex: DexProgram,
+        age_in_slots: u64,
+    },
     QuoteFailed(WhySwapQuoteFailed),
     /// The swap would run past the tick arrays we have cached, so the quote is not trustworthy.
     PartialFill,
-    NotProfitableAfterCosts { profit_before_costs: i128, total_costs: u64 },
+    NotProfitableAfterCosts {
+        profit_before_costs: i128,
+        total_costs: u64,
+    },
 }
 
 impl From<WhySwapQuoteFailed> for WhyTradeWasSkipped {
@@ -155,15 +175,30 @@ impl std::fmt::Display for WhyTradeWasSkipped {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NoStreamUpdateYet => write!(formatter, "no Geyser update received yet"),
-            Self::StreamSilentTooLong { milliseconds_since_last_update } => {
-                write!(formatter, "stream silent for {milliseconds_since_last_update} ms (stale)")
+            Self::StreamSilentTooLong {
+                milliseconds_since_last_update,
+            } => {
+                write!(
+                    formatter,
+                    "stream silent for {milliseconds_since_last_update} ms (stale)"
+                )
             }
             Self::PoolStateTooOld { dex, age_in_slots } => {
-                write!(formatter, "{} state is {age_in_slots} slots old (stale)", dex.name())
+                write!(
+                    formatter,
+                    "{} state is {age_in_slots} slots old (stale)",
+                    dex.name()
+                )
             }
             Self::QuoteFailed(reason) => write!(formatter, "{reason}"),
-            Self::PartialFill => write!(formatter, "swap would leave the cached tick arrays (partial fill)"),
-            Self::NotProfitableAfterCosts { profit_before_costs, total_costs } => write!(
+            Self::PartialFill => write!(
+                formatter,
+                "swap would leave the cached tick arrays (partial fill)"
+            ),
+            Self::NotProfitableAfterCosts {
+                profit_before_costs,
+                total_costs,
+            } => write!(
                 formatter,
                 "profit {profit_before_costs} lamports does not cover costs {total_costs} + minimum profit"
             ),
@@ -184,8 +219,12 @@ pub fn decide_if_trade_is_worth_it(
 ) -> Result<ApprovedArbitrageTrade, WhyTradeWasSkipped> {
     check_cache_is_fresh(&[sell_pool, buy_pool], freshness, rules)?;
 
-    let mut round_trip =
-        quote_most_profitable_two_pool_round_trip(sell_pool, sell_pool_tick_arrays, buy_pool, buy_pool_tick_arrays)?;
+    let mut round_trip = quote_most_profitable_two_pool_round_trip(
+        sell_pool,
+        sell_pool_tick_arrays,
+        buy_pool,
+        buy_pool_tick_arrays,
+    )?;
     let size_was_capped = round_trip.start_token_amount_in > rules.max_trade_input_lamports;
     if size_was_capped {
         // Profit is a hill in trade size (Step 5), so a smaller size is still
@@ -202,27 +241,34 @@ pub fn decide_if_trade_is_worth_it(
         return Err(WhyTradeWasSkipped::PartialFill);
     }
 
-    let leg_1_minimum_bridge_token_out =
-        amount_minus_basis_points(round_trip.bridge_token_amount_between_legs, rules.slippage_tolerance_in_basis_points);
+    let leg_1_minimum_bridge_token_out = amount_minus_basis_points(
+        round_trip.bridge_token_amount_between_legs,
+        rules.slippage_tolerance_in_basis_points,
+    );
     // Leg 2 spends exactly what leg 1 is guaranteed to return; with slippage > 0
     // that is a bit less than the quote, so re-quote leg 2 at that amount.
-    let expected_start_token_out = if leg_1_minimum_bridge_token_out == round_trip.bridge_token_amount_between_legs {
-        round_trip.start_token_amount_out
-    } else {
-        let leg_2 = quote_swap_exact_input(
-            buy_pool,
-            buy_pool_tick_arrays,
-            leg_1_minimum_bridge_token_out,
-            SwapDirection::TokenBToTokenA,
-        )?;
-        leg_2.output_amount
-    };
+    let expected_start_token_out =
+        if leg_1_minimum_bridge_token_out == round_trip.bridge_token_amount_between_legs {
+            round_trip.start_token_amount_out
+        } else {
+            let leg_2 = quote_swap_exact_input(
+                buy_pool,
+                buy_pool_tick_arrays,
+                leg_1_minimum_bridge_token_out,
+                SwapDirection::TokenBToTokenA,
+            )?;
+            leg_2.output_amount
+        };
 
     let costs = estimate_transaction_costs(rules, round_trip.start_token_amount_in);
-    let profit_before_costs = i128::from(expected_start_token_out) - i128::from(round_trip.start_token_amount_in);
+    let profit_before_costs =
+        i128::from(expected_start_token_out) - i128::from(round_trip.start_token_amount_in);
     let expected_profit_after_costs = profit_before_costs - i128::from(costs.total());
     if expected_profit_after_costs < i128::from(rules.min_profit_after_costs_lamports) {
-        return Err(WhyTradeWasSkipped::NotProfitableAfterCosts { profit_before_costs, total_costs: costs.total() });
+        return Err(WhyTradeWasSkipped::NotProfitableAfterCosts {
+            profit_before_costs,
+            total_costs: costs.total(),
+        });
     }
 
     Ok(ApprovedArbitrageTrade {
@@ -250,21 +296,30 @@ pub fn decide_if_trade_is_worth_it(
 /// be stale) and each pool's own age in slots compared with the newest slot
 /// the stream has shown. A busy pool like SOL/USDC changes nearly every slot,
 /// so a pool that has not changed for many slots is suspicious.
+/// TODO? we are planing to add more pool not just SOL/USDC
 pub fn check_cache_is_fresh(
     pools: &[&ConcentratedLiquidityPoolState],
     freshness: CacheFreshness,
     rules: &TradeDecisionRules,
 ) -> Result<(), WhyTradeWasSkipped> {
-    let Some(milliseconds_since_last_update) = freshness.milliseconds_since_last_stream_update else {
+    let Some(milliseconds_since_last_update) = freshness.milliseconds_since_last_stream_update
+    else {
         return Err(WhyTradeWasSkipped::NoStreamUpdateYet);
     };
     if milliseconds_since_last_update > rules.max_milliseconds_since_last_stream_update {
-        return Err(WhyTradeWasSkipped::StreamSilentTooLong { milliseconds_since_last_update });
+        return Err(WhyTradeWasSkipped::StreamSilentTooLong {
+            milliseconds_since_last_update,
+        });
     }
     for pool in pools {
-        let age_in_slots = freshness.newest_slot_seen_from_stream.saturating_sub(pool.slot);
+        let age_in_slots = freshness
+            .newest_slot_seen_from_stream
+            .saturating_sub(pool.slot);
         if age_in_slots > rules.max_pool_state_age_in_slots {
-            return Err(WhyTradeWasSkipped::PoolStateTooOld { dex: pool.dex, age_in_slots });
+            return Err(WhyTradeWasSkipped::PoolStateTooOld {
+                dex: pool.dex,
+                age_in_slots,
+            });
         }
     }
     Ok(())

@@ -1,11 +1,10 @@
 //! The table of cached pools printed after every pool update.
 
-use super::arbitrage_quote_logs::print_arbitrage_quotes;
 use crate::step_3_store_latest_pool_state::{
     ConcentratedLiquidityPoolState, DexProgram, LatestPoolStateCache, shorten_public_key_for_logs,
 };
 
-pub fn pool_snapshot_and_arbitrage_quotes(cache: &LatestPoolStateCache) {
+pub fn pool_snapshot(cache: &LatestPoolStateCache) {
     println!("[snapshot]  {} pool(s) cached", cache.pool_count());
     println!(
         "  {:<14}  {:<10}  {:>10}  {:>7}  {:>10}  {:>11}  {:>6}",
@@ -55,7 +54,6 @@ pub fn pool_snapshot_and_arbitrage_quotes(cache: &LatestPoolStateCache) {
             println!(
                 "  gap raydium−orca = {price_gap:+.4} USDC/SOL  ({price_gap_in_basis_points:+.2} bps of mid)  — spot prices only, fees not included"
             );
-            print_arbitrage_quotes(cache);
         }
         _ => println!("  (need both pools in the cache before a price gap can be shown)"),
     }

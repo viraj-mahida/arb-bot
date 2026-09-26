@@ -5,12 +5,13 @@
 //! the start of the 8-byte Anchor discriminator.
 
 use super::read_little_endian_numbers::{
-    read_i128_little_endian, read_i32_little_endian, read_public_key, read_u128_little_endian,
-    read_u16_little_endian,
+    read_i32_little_endian, read_i128_little_endian, read_public_key, read_u16_little_endian,
+    read_u128_little_endian,
 };
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, DexProgram, DexSpecificSwapAccounts, InitializedTickWithLiquidityChange,
-    TickArrayAccountWithInitializedTicks, TickArrayPdaToWatch, WatchedPoolConfig,
+    ConcentratedLiquidityPoolState, DexProgram, DexSpecificSwapAccounts,
+    InitializedTickWithLiquidityChange, TickArrayAccountWithInitializedTicks, TickArrayPdaToWatch,
+    WatchedPoolConfig,
 };
 
 // ── Whirlpool (pool) account ──────────────────────────────────────────────
@@ -55,7 +56,10 @@ pub fn decode_orca_pool_account(
         // Orca stores the fee on-chain, so we prefer it; the config value is only a fallback.
         fee_rate_in_millionths: read_u16_little_endian(account_data, ORCA_POOL_FEE_RATE_AT_BYTE)
             .unwrap_or_else(|| pool_config.fee_rate_in_millionths()),
-        active_liquidity_at_current_price: read_u128_little_endian(account_data, ORCA_POOL_LIQUIDITY_AT_BYTE)?,
+        active_liquidity_at_current_price: read_u128_little_endian(
+            account_data,
+            ORCA_POOL_LIQUIDITY_AT_BYTE,
+        )?,
         sqrt_price_q64_64: read_u128_little_endian(account_data, ORCA_POOL_SQRT_PRICE_AT_BYTE)?,
         current_tick_index: read_i32_little_endian(account_data, ORCA_POOL_CURRENT_TICK_AT_BYTE)?,
         token_a_mint: read_public_key(account_data, ORCA_POOL_TOKEN_A_MINT_AT_BYTE)?,
@@ -110,15 +114,19 @@ pub fn decode_orca_tick_array_account(
         return None;
     }
     // Guards against a wrong PDA: the array must say it belongs to the pool we expect.
-    if read_public_key(account_data, ORCA_TICK_ARRAY_POOL_ADDRESS_AT_BYTE)? != watched_tick_array.pool_address {
+    if read_public_key(account_data, ORCA_TICK_ARRAY_POOL_ADDRESS_AT_BYTE)?
+        != watched_tick_array.pool_address
+    {
         return None;
     }
 
-    let start_tick_index = read_i32_little_endian(account_data, ORCA_TICK_ARRAY_START_TICK_AT_BYTE)?;
+    let start_tick_index =
+        read_i32_little_endian(account_data, ORCA_TICK_ARRAY_START_TICK_AT_BYTE)?;
     let tick_spacing = i32::from(watched_tick_array.tick_spacing);
     let mut initialized_ticks = Vec::new();
     for slot_position in 0..ORCA_TICK_SLOTS_PER_ARRAY {
-        let slot_start = ORCA_TICK_ARRAY_FIRST_TICK_SLOT_AT_BYTE + slot_position * ORCA_TICK_SLOT_SIZE_IN_BYTES;
+        let slot_start =
+            ORCA_TICK_ARRAY_FIRST_TICK_SLOT_AT_BYTE + slot_position * ORCA_TICK_SLOT_SIZE_IN_BYTES;
         let is_initialized = *account_data.get(slot_start)? != 0;
         if !is_initialized {
             continue;

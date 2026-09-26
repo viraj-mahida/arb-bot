@@ -71,6 +71,23 @@ pub struct TwoPoolArbitrageRoundTrip {
     pub both_swaps_fully_filled: bool,
 }
 
+/// One attempted sell→buy round trip, including the direction when quoting failed.
+///
+/// The DEX names are stored separately from [`TwoPoolArbitrageRoundTrip`] so a
+/// skipped quote can still be labeled `raydium_clmm→orca_whirlpool`.
+#[derive(Debug)]
+pub struct DirectedRoundTripQuote {
+    pub sell_pool_dex: DexProgram,
+    pub buy_pool_dex: DexProgram,
+    pub result: Result<TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed>,
+}
+
+impl DirectedRoundTripQuote {
+    pub fn direction_label(&self) -> String {
+        format!("{}→{}", self.sell_pool_dex.name(), self.buy_pool_dex.name())
+    }
+}
+
 impl TwoPoolArbitrageRoundTrip {
     /// Profit (positive) or loss (negative) in raw start-token units (lamports today).
     ///
@@ -110,8 +127,12 @@ impl std::fmt::Display for WhySwapQuoteFailed {
                 write!(formatter, "tick array for the current price not cached yet")
             }
             Self::TickSpacingIsZero => write!(formatter, "tick_spacing is 0"),
-            Self::MoreThanSixTickArraysForOrca => write!(formatter, "more than 6 tick arrays in the window"),
-            Self::NoProfitablePriceGapAfterFees => write!(formatter, "no price gap left after fees"),
+            Self::MoreThanSixTickArraysForOrca => {
+                write!(formatter, "more than 6 tick arrays in the window")
+            }
+            Self::NoProfitablePriceGapAfterFees => {
+                write!(formatter, "no price gap left after fees")
+            }
             Self::OrcaQuoteLibraryError(reason) => write!(formatter, "orca: {reason}"),
             Self::RaydiumQuoteLibraryError(reason) => write!(formatter, "raydium: {reason}"),
         }

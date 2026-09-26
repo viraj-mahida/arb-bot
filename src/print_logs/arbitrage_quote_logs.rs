@@ -1,0 +1,50 @@
+//! Round-trip quotes: a fixed 0.1 SOL probe, then the best size from Step 5.
+//!
+//! Formatting only. The quotes themselves are produced by Steps 4 and 5.
+
+use crate::step_4_quote_swaps::{DirectedRoundTripQuote, TwoPoolArbitrageRoundTrip};
+use crate::step_5_find_best_arbitrage_size::WatchedPairRoundTripQuotes;
+
+const LAMPORTS_PER_SOL: f64 = 1e9;
+const MICRO_USDC_PER_USDC: f64 = 1e6;
+
+pub fn print_arbitrage_quotes(quotes: &WatchedPairRoundTripQuotes) {
+    for quote in &quotes.probe_round_trips {
+        print_round_trip("quote 0.1 SOL", quote);
+    }
+    for quote in &quotes.best_size_round_trips {
+        print_round_trip("best size", quote);
+    }
+}
+
+fn print_round_trip(tag: &str, quote: &DirectedRoundTripQuote) {
+    match &quote.result {
+        Ok(round_trip) => print_successful_round_trip(tag, round_trip),
+        Err(reason) => println!("[{tag}]  {}  skipped: {reason}", quote.direction_label()),
+    }
+}
+
+fn print_successful_round_trip(tag: &str, round_trip: &TwoPoolArbitrageRoundTrip) {
+    let direction_label = format!(
+        "{}→{}",
+        round_trip.sell_pool_dex.name(),
+        round_trip.buy_pool_dex.name()
+    );
+    let profit_in_sol = round_trip.profit_in_start_token() as f64 / LAMPORTS_PER_SOL;
+    let partial_fill_note = if round_trip.both_swaps_fully_filled {
+        ""
+    } else {
+        "  (partial fill)"
+    };
+    let profitable_note = if round_trip.profit_in_start_token() > 0 {
+        "  PROFITABLE"
+    } else {
+        ""
+    };
+    println!(
+        "[{tag}]  {direction_label}  {:.4} SOL -> {:.4} USDC -> {:.4} SOL  profit={profit_in_sol:+.6} SOL{partial_fill_note}{profitable_note}",
+        round_trip.start_token_amount_in as f64 / LAMPORTS_PER_SOL,
+        round_trip.bridge_token_amount_between_legs as f64 / MICRO_USDC_PER_USDC,
+        round_trip.start_token_amount_out as f64 / LAMPORTS_PER_SOL,
+    );
+}

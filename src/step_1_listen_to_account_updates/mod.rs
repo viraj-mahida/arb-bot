@@ -20,9 +20,9 @@
 //! ([`load_tick_arrays_not_yet_streamed`]). Raydium's fee tier is read the
 //! same way, once ([`load_raydium_fee_config`]).
 //!
-//! **What comes next:** decoding (Step 2), storing (Step 3), printing a fresh
-//! snapshot with quotes (Steps 4–6), and — when trading is configured —
-//! letting Step 7 decide whether to trade, after every pool update.
+//! **What comes next:** decoding (Step 2), storing (Step 3), quoting (Steps 4–5),
+//! printing the snapshot (`print_logs`), and — when trading is configured —
+//! letting Step 6 decide whether to trade, after every pool update.
 
 mod account_update_loop;
 mod handle_pool_account_update;

@@ -16,15 +16,19 @@ use solana_instruction::{AccountMeta, Instruction};
 use solana_pubkey::Pubkey;
 
 use super::well_known_program_addresses::{
-    INSTRUCTIONS_SYSVAR_ADDRESS, KAMINO_LEND_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS, WRAPPED_SOL_MINT_ADDRESS,
-    program, pubkey, read_only, read_only_program, writable,
+    INSTRUCTIONS_SYSVAR_ADDRESS, KAMINO_LEND_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS,
+    WRAPPED_SOL_MINT_ADDRESS, program, pubkey, read_only, read_only_program, writable,
 };
-use crate::step_3_store_latest_pool_state::{PublicKeyBytes, encode_public_key_as_base58, parse_base58_public_key};
+use crate::step_3_store_latest_pool_state::{
+    PublicKeyBytes, encode_public_key_as_base58, parse_base58_public_key,
+};
 
 /// `sha256("global:flash_borrow_reserve_liquidity")[..8]`
-pub const KAMINO_FLASH_BORROW_DISCRIMINATOR: [u8; 8] = [0x87, 0xe7, 0x34, 0xa7, 0x07, 0x34, 0xd4, 0xc1];
+pub const KAMINO_FLASH_BORROW_DISCRIMINATOR: [u8; 8] =
+    [0x87, 0xe7, 0x34, 0xa7, 0x07, 0x34, 0xd4, 0xc1];
 /// `sha256("global:flash_repay_reserve_liquidity")[..8]`
-pub const KAMINO_FLASH_REPAY_DISCRIMINATOR: [u8; 8] = [0xb9, 0x75, 0x00, 0xcb, 0x60, 0xf5, 0xb4, 0xba];
+pub const KAMINO_FLASH_REPAY_DISCRIMINATOR: [u8; 8] =
+    [0xb9, 0x75, 0x00, 0xcb, 0x60, 0xf5, 0xb4, 0xba];
 
 /// Which lender a flash loan comes from.
 #[derive(Debug, Clone)]
@@ -33,7 +37,12 @@ pub enum FlashLoanProvider {
 }
 
 impl FlashLoanProvider {
-    pub fn borrow_instruction(&self, wallet: &PublicKeyBytes, destination: &PublicKeyBytes, amount: u64) -> Instruction {
+    pub fn borrow_instruction(
+        &self,
+        wallet: &PublicKeyBytes,
+        destination: &PublicKeyBytes,
+        amount: u64,
+    ) -> Instruction {
         match self {
             Self::Kamino(kamino) => kamino.flash_borrow_instruction(wallet, destination, amount),
         }
@@ -48,7 +57,9 @@ impl FlashLoanProvider {
         borrow_instruction_index: u8,
     ) -> Instruction {
         match self {
-            Self::Kamino(kamino) => kamino.flash_repay_instruction(wallet, source, amount, borrow_instruction_index),
+            Self::Kamino(kamino) => {
+                kamino.flash_repay_instruction(wallet, source, amount, borrow_instruction_index)
+            }
         }
     }
 }
@@ -117,7 +128,12 @@ impl KaminoFlashLoanAccounts {
         })
     }
 
-    pub fn flash_borrow_instruction(&self, wallet: &PublicKeyBytes, destination: &PublicKeyBytes, amount: u64) -> Instruction {
+    pub fn flash_borrow_instruction(
+        &self,
+        wallet: &PublicKeyBytes,
+        destination: &PublicKeyBytes,
+        amount: u64,
+    ) -> Instruction {
         let mut data = KAMINO_FLASH_BORROW_DISCRIMINATOR.to_vec();
         data.extend_from_slice(&amount.to_le_bytes());
         Instruction::new_with_bytes(
@@ -147,7 +163,12 @@ impl KaminoFlashLoanAccounts {
     /// Borrow and repay share one account layout; only the token flow direction differs.
     /// Unused optional accounts (referrer) are filled with the program's own address,
     /// which is how Anchor encodes "None".
-    fn accounts(&self, wallet: &PublicKeyBytes, from: PublicKeyBytes, to: PublicKeyBytes) -> Vec<AccountMeta> {
+    fn accounts(
+        &self,
+        wallet: &PublicKeyBytes,
+        from: PublicKeyBytes,
+        to: PublicKeyBytes,
+    ) -> Vec<AccountMeta> {
         vec![
             AccountMeta::new_readonly(pubkey(*wallet), true),
             read_only(self.lending_market_authority),
@@ -167,7 +188,9 @@ impl KaminoFlashLoanAccounts {
 
 /// PDA `["lma", lending_market]` under the Kamino program.
 pub fn kamino_lending_market_authority(lending_market: &PublicKeyBytes) -> PublicKeyBytes {
-    let (address, _bump) =
-        Pubkey::find_program_address(&[b"lma", lending_market.as_ref()], &program(KAMINO_LEND_PROGRAM_ADDRESS));
+    let (address, _bump) = Pubkey::find_program_address(
+        &[b"lma", lending_market.as_ref()],
+        &program(KAMINO_LEND_PROGRAM_ADDRESS),
+    );
     address.to_bytes()
 }

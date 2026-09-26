@@ -60,7 +60,11 @@ mod swap_quote_types;
 mod two_pool_arbitrage_round_trip;
 
 pub use current_tick_array_check::is_tick_array_for_current_price_cached;
-#[allow(unused_imports)] // single-swap quoting; used by tests and by the future transaction step
+#[allow(unused_imports)]
+// single-swap quoting; used by tests and by the future transaction step
 pub use quote_swap_exact_input::quote_swap_exact_input;
 pub use swap_quote_types::*;
-pub use two_pool_arbitrage_round_trip::quote_two_pool_round_trip;
+pub(crate) use two_pool_arbitrage_round_trip::CachedOrcaAndRaydiumPools;
+pub use two_pool_arbitrage_round_trip::{
+    quote_probe_round_trips_from_cache, quote_two_pool_round_trip,
+};

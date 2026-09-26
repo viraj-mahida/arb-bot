@@ -6,10 +6,14 @@ use std::sync::Arc;
 use futures::StreamExt;
 use yellowstone_grpc_proto::geyser::subscribe_update::UpdateOneof;
 
-use crate::solana_connections::{GeyserAccountUpdateStream, GeyserSubscriptionSender, SolanaRpcClient};
-use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, WatchedPools, public_key_from_byte_slice};
-use crate::step_6_print_logs;
-use crate::step_7_build_and_send_transactions::ArbitrageTradeExecutor;
+use crate::print_logs;
+use crate::solana_connections::{
+    GeyserAccountUpdateStream, GeyserSubscriptionSender, SolanaRpcClient,
+};
+use crate::step_3_store_latest_pool_state::{
+    LatestPoolStateCache, WatchedPools, public_key_from_byte_slice,
+};
+use crate::step_6_build_and_send_transactions::ArbitrageTradeExecutor;
 
 /// Everything the handlers need while processing updates.
 pub(super) struct AccountUpdateListener<'a> {
@@ -35,18 +39,21 @@ pub async fn process_account_updates_forever(
 ) {
     let mut listener = AccountUpdateListener {
         geyser_subscription_sender,
-        all_subscribed_addresses_base58: watched_pools.pool_addresses_to_subscribe().into_iter().collect(),
+        all_subscribed_addresses_base58: watched_pools
+            .pool_addresses_to_subscribe()
+            .into_iter()
+            .collect(),
         cache,
         rpc_client,
         trade_executor,
     };
-    step_6_print_logs::waiting_for_account_updates();
+    print_logs::waiting_for_account_updates();
 
     while let Some(message) = account_update_stream.next().await {
         let update = match message {
             Ok(update) => update,
             Err(error) => {
-                step_6_print_logs::geyser_stream_error(error);
+                print_logs::geyser_stream_error(error);
                 continue;
             }
         };
@@ -64,7 +71,12 @@ pub async fn process_account_updates_forever(
 
         if let Some(pool_config) = watched_pools.config_for_pool_address(&account_address) {
             listener
-                .handle_pool_account_update(pool_config, &account.data, account_update.slot, account.write_version)
+                .handle_pool_account_update(
+                    pool_config,
+                    &account.data,
+                    account_update.slot,
+                    account.write_version,
+                )
                 .await;
         } else if let Some(watched_tick_array) = cache.watched_tick_array(&account_address) {
             listener.handle_tick_array_account_update(

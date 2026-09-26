@@ -1,4 +1,4 @@
-//! # Step 7 — Build and send transactions
+//! # Step 6 — Build and send transactions
 //!
 //! **What came before:** Step 5 found the trade size where a round trip earns
 //! the most, and Step 4 quoted it with each DEX's exact math.

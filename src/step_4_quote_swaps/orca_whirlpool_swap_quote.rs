@@ -70,11 +70,13 @@ fn contiguous_orca_tick_array_facades(
         return Err(WhySwapQuoteFailed::TickSpacingIsZero);
     }
 
-    let tick_array_by_start_tick: std::collections::HashMap<i32, &TickArrayAccountWithInitializedTicks> =
-        cached_tick_arrays
-            .iter()
-            .map(|tick_array| (tick_array.start_tick_index, tick_array))
-            .collect();
+    let tick_array_by_start_tick: std::collections::HashMap<
+        i32,
+        &TickArrayAccountWithInitializedTicks,
+    > = cached_tick_arrays
+        .iter()
+        .map(|tick_array| (tick_array.start_tick_index, tick_array))
+        .collect();
     let lowest_start = *tick_array_by_start_tick
         .keys()
         .min()
@@ -117,7 +119,9 @@ fn orca_facade_from_cached_tick_array(
                     liquidity_net: tick.liquidity_added_when_price_crosses_upward,
                     // The swap math only reads `liquidity_net`. We do not decode
                     // `liquidity_gross`, so any non-zero value marks the tick as used.
-                    liquidity_gross: tick.liquidity_added_when_price_crosses_upward.unsigned_abs(),
+                    liquidity_gross: tick
+                        .liquidity_added_when_price_crosses_upward
+                        .unsigned_abs(),
                     ..TickFacade::default()
                 };
             }
@@ -138,7 +142,9 @@ fn empty_orca_tick_array_facade(start_tick_index: i32) -> TickArrayFacade {
 }
 
 /// Orca's API takes an enum with one variant per count (One, Two, … Six), not a list.
-fn into_orca_tick_arrays_enum(facades: Vec<TickArrayFacade>) -> Result<TickArrays, WhySwapQuoteFailed> {
+fn into_orca_tick_arrays_enum(
+    facades: Vec<TickArrayFacade>,
+) -> Result<TickArrays, WhySwapQuoteFailed> {
     Ok(match facades.as_slice() {
         [] => return Err(WhySwapQuoteFailed::NoTickArraysCachedYet),
         [a] => TickArrays::One(*a),

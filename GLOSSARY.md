@@ -199,7 +199,7 @@ Terms are grouped in the order you meet them when reading the steps.
 
 ---
 
-## Building and sending transactions (Step 7)
+## Building and sending transactions (Step 6)
 
 **Instruction**
 - **What it is:** one call into a program, for example "swap 1 SOL on this pool".

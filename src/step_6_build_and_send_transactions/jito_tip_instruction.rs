@@ -30,7 +30,10 @@ pub const JITO_MAINNET_TIP_ACCOUNTS: [&str; 8] = [
 ];
 
 pub fn default_jito_tip_accounts() -> Vec<PublicKeyBytes> {
-    JITO_MAINNET_TIP_ACCOUNTS.iter().map(|address| parse_base58_public_key(address)).collect()
+    JITO_MAINNET_TIP_ACCOUNTS
+        .iter()
+        .map(|address| parse_base58_public_key(address))
+        .collect()
 }
 
 /// Pick a tip account pseudo-randomly (clock nanoseconds are random enough to spread load).
@@ -45,6 +48,10 @@ pub fn pick_tip_account(tip_accounts: &[PublicKeyBytes]) -> Option<PublicKeyByte
     Some(tip_accounts[nanoseconds as usize % tip_accounts.len()])
 }
 
-pub fn jito_tip_instruction(wallet: &PublicKeyBytes, tip_account: &PublicKeyBytes, tip_lamports: u64) -> Instruction {
+pub fn jito_tip_instruction(
+    wallet: &PublicKeyBytes,
+    tip_account: &PublicKeyBytes,
+    tip_lamports: u64,
+) -> Instruction {
     transfer_sol(wallet, tip_account, tip_lamports)
 }

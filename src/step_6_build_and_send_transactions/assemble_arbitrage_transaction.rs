@@ -31,7 +31,9 @@ use super::decide_if_trade_is_worth_it::ApprovedArbitrageTrade;
 use super::flash_loan_instructions::FlashLoanProvider;
 use super::jito_tip_instruction::jito_tip_instruction;
 use super::swap_leg_instruction::{SwapLeg, build_swap_instruction};
-use super::trading_wallet::{TradingWallet, close_token_account, create_associated_token_account_if_missing, wrap_sol};
+use super::trading_wallet::{
+    TradingWallet, close_token_account, create_associated_token_account_if_missing, wrap_sol,
+};
 use super::well_known_program_addresses::pubkey;
 use crate::step_3_store_latest_pool_state::{PublicKeyBytes, public_key_from_byte_slice};
 use crate::step_4_quote_swaps::SwapDirection;
@@ -75,9 +77,17 @@ pub fn arbitrage_instructions(
 
     let flash_borrow_instruction_index = instructions.len();
     match funding {
-        FundingSource::OwnWallet => instructions.extend(wrap_sol(&owner, &start_token_account, trade.start_token_amount_in)),
+        FundingSource::OwnWallet => instructions.extend(wrap_sol(
+            &owner,
+            &start_token_account,
+            trade.start_token_amount_in,
+        )),
         FundingSource::FlashLoan(provider) => {
-            instructions.push(provider.borrow_instruction(&owner, &start_token_account, trade.start_token_amount_in));
+            instructions.push(provider.borrow_instruction(
+                &owner,
+                &start_token_account,
+                trade.start_token_amount_in,
+            ));
         }
     }
 
@@ -103,8 +113,14 @@ pub fn arbitrage_instructions(
     }));
 
     if let FundingSource::FlashLoan(provider) = funding {
-        let borrow_index = u8::try_from(flash_borrow_instruction_index).expect("fewer than 256 instructions");
-        instructions.push(provider.repay_instruction(&owner, &start_token_account, trade.start_token_amount_in, borrow_index));
+        let borrow_index =
+            u8::try_from(flash_borrow_instruction_index).expect("fewer than 256 instructions");
+        instructions.push(provider.repay_instruction(
+            &owner,
+            &start_token_account,
+            trade.start_token_amount_in,
+            borrow_index,
+        ));
     }
     instructions.push(close_token_account(&start_token_account, &owner));
     if let Some((tip_account, tip_lamports)) = fees.jito_tip {
@@ -128,8 +144,13 @@ pub fn compile_and_sign_v0_transaction(
     address_lookup_tables: &[AddressLookupTableAccount],
     recent_blockhash: Hash,
 ) -> Result<SignedTransaction, String> {
-    let message = v0::Message::try_compile(&pubkey(wallet.address()), instructions, address_lookup_tables, recent_blockhash)
-        .map_err(|error| format!("could not compile message: {error}"))?;
+    let message = v0::Message::try_compile(
+        &pubkey(wallet.address()),
+        instructions,
+        address_lookup_tables,
+        recent_blockhash,
+    )
+    .map_err(|error| format!("could not compile message: {error}"))?;
     let message_bytes = VersionedMessage::V0(message).serialize();
     let signature = wallet.sign_message_bytes(&message_bytes);
 
@@ -144,7 +165,10 @@ pub fn compile_and_sign_v0_transaction(
             wire_bytes.len()
         ));
     }
-    Ok(SignedTransaction { wire_bytes, signature_base58: bs58::encode(signature).into_string() })
+    Ok(SignedTransaction {
+        wire_bytes,
+        signature_base58: bs58::encode(signature).into_string(),
+    })
 }
 
 /// Lookup-table accounts start with a 56-byte header (authority, slots, …),
@@ -152,12 +176,18 @@ pub fn compile_and_sign_v0_transaction(
 const LOOKUP_TABLE_HEADER_SIZE_IN_BYTES: usize = 56;
 
 /// Decode an address lookup table account's bytes into the list of addresses it stores.
-pub fn decode_address_lookup_table(table_address: PublicKeyBytes, account_data: &[u8]) -> Option<AddressLookupTableAccount> {
+pub fn decode_address_lookup_table(
+    table_address: PublicKeyBytes,
+    account_data: &[u8],
+) -> Option<AddressLookupTableAccount> {
     let addresses = account_data
         .get(LOOKUP_TABLE_HEADER_SIZE_IN_BYTES..)?
         .chunks_exact(32)
         .filter_map(public_key_from_byte_slice)
         .map(pubkey)
         .collect();
-    Some(AddressLookupTableAccount { key: pubkey(table_address), addresses })
+    Some(AddressLookupTableAccount {
+        key: pubkey(table_address),
+        addresses,
+    })
 }

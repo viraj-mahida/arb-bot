@@ -5,9 +5,12 @@
 //! whenever it crosses an initialized tick, its active liquidity changes.
 
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, InitializedTickWithLiquidityChange, TickArrayAccountWithInitializedTicks,
+    ConcentratedLiquidityPoolState, InitializedTickWithLiquidityChange,
+    TickArrayAccountWithInitializedTicks,
 };
-use crate::step_4_quote_swaps::{SwapDirection, WhySwapQuoteFailed, is_tick_array_for_current_price_cached};
+use crate::step_4_quote_swaps::{
+    SwapDirection, WhySwapQuoteFailed, is_tick_array_for_current_price_cached,
+};
 
 pub(super) struct PoolPriceWalkerAlongTicks {
     /// Simulated current price, as `sqrt(price) * 2^64`.
@@ -45,7 +48,8 @@ impl PoolPriceWalkerAlongTicks {
         if !is_tick_array_for_current_price_cached(pool, cached_tick_arrays) {
             return Err(WhySwapQuoteFailed::TickArrayForCurrentPriceNotCachedYet);
         }
-        let ticks_covered_by_one_array = pool.dex.ticks_per_tick_array() * i32::from(pool.tick_spacing);
+        let ticks_covered_by_one_array =
+            pool.dex.ticks_per_tick_array() * i32::from(pool.tick_spacing);
         if ticks_covered_by_one_array == 0 {
             return Err(WhySwapQuoteFailed::TickSpacingIsZero);
         }
@@ -62,10 +66,11 @@ impl PoolPriceWalkerAlongTicks {
             + ticks_covered_by_one_array
             - 1;
 
-        let mut initialized_ticks_sorted: Vec<InitializedTickWithLiquidityChange> = cached_tick_arrays
-            .iter()
-            .flat_map(|tick_array| tick_array.initialized_ticks.iter().copied())
-            .collect();
+        let mut initialized_ticks_sorted: Vec<InitializedTickWithLiquidityChange> =
+            cached_tick_arrays
+                .iter()
+                .flat_map(|tick_array| tick_array.initialized_ticks.iter().copied())
+                .collect();
         initialized_ticks_sorted.sort_by_key(|tick| tick.tick_index);
         initialized_ticks_sorted.dedup_by_key(|tick| tick.tick_index);
 
@@ -91,8 +96,14 @@ impl PoolPriceWalkerAlongTicks {
             .rev()
             .find(|tick| tick.tick_index <= self.current_tick_index)
         {
-            Some(tick) => NextTickBoundary { tick_index: tick.tick_index, is_initialized_tick: true },
-            None => NextTickBoundary { tick_index: self.lowest_cached_tick_index, is_initialized_tick: false },
+            Some(tick) => NextTickBoundary {
+                tick_index: tick.tick_index,
+                is_initialized_tick: true,
+            },
+            None => NextTickBoundary {
+                tick_index: self.lowest_cached_tick_index,
+                is_initialized_tick: false,
+            },
         }
     }
 
@@ -103,8 +114,14 @@ impl PoolPriceWalkerAlongTicks {
             .iter()
             .find(|tick| tick.tick_index > self.current_tick_index)
         {
-            Some(tick) => NextTickBoundary { tick_index: tick.tick_index, is_initialized_tick: true },
-            None => NextTickBoundary { tick_index: self.highest_cached_tick_index, is_initialized_tick: false },
+            Some(tick) => NextTickBoundary {
+                tick_index: tick.tick_index,
+                is_initialized_tick: true,
+            },
+            None => NextTickBoundary {
+                tick_index: self.highest_cached_tick_index,
+                is_initialized_tick: false,
+            },
         }
     }
 
@@ -116,7 +133,11 @@ impl PoolPriceWalkerAlongTicks {
     ///
     /// After crossing downward we sit at `tick_index - 1`, i.e. in the range
     /// just below the tick, so the next search does not find the same tick again.
-    pub(super) fn cross_tick_and_update_liquidity(&mut self, tick_index: i32, direction: SwapDirection) {
+    pub(super) fn cross_tick_and_update_liquidity(
+        &mut self,
+        tick_index: i32,
+        direction: SwapDirection,
+    ) {
         let liquidity_added_when_crossing_upward = self
             .initialized_ticks_sorted
             .iter()
@@ -124,17 +145,28 @@ impl PoolPriceWalkerAlongTicks {
             .map(|tick| tick.liquidity_added_when_price_crosses_upward)
             .unwrap_or(0);
         let moving_price_down = direction == SwapDirection::TokenAToTokenB;
-        self.active_liquidity =
-            liquidity_after_crossing(self.active_liquidity, liquidity_added_when_crossing_upward, moving_price_down);
+        self.active_liquidity = liquidity_after_crossing(
+            self.active_liquidity,
+            liquidity_added_when_crossing_upward,
+            moving_price_down,
+        );
         self.sqrt_price_q64_64 = orca_whirlpools_core::tick_index_to_sqrt_price(tick_index);
-        self.current_tick_index = if moving_price_down { tick_index - 1 } else { tick_index };
+        self.current_tick_index = if moving_price_down {
+            tick_index - 1
+        } else {
+            tick_index
+        };
     }
 }
 
 /// Apply a tick's liquidity change in the direction the price is moving.
 ///
 /// Saturating math: a malformed tick can never wrap liquidity around to a huge number.
-fn liquidity_after_crossing(active_liquidity: u128, liquidity_added_when_crossing_upward: i128, moving_price_down: bool) -> u128 {
+fn liquidity_after_crossing(
+    active_liquidity: u128,
+    liquidity_added_when_crossing_upward: i128,
+    moving_price_down: bool,
+) -> u128 {
     let change_size = liquidity_added_when_crossing_upward.unsigned_abs();
     let liquidity_goes_down = if moving_price_down {
         liquidity_added_when_crossing_upward >= 0

@@ -35,7 +35,11 @@ pub fn quote_swap_exact_input(
         });
     }
     match pool.dex {
-        DexProgram::OrcaWhirlpool => quote_orca_whirlpool_swap(pool, cached_tick_arrays, input_amount, direction),
-        DexProgram::RaydiumClmm => quote_raydium_clmm_swap(pool, cached_tick_arrays, input_amount, direction),
+        DexProgram::OrcaWhirlpool => {
+            quote_orca_whirlpool_swap(pool, cached_tick_arrays, input_amount, direction)
+        }
+        DexProgram::RaydiumClmm => {
+            quote_raydium_clmm_swap(pool, cached_tick_arrays, input_amount, direction)
+        }
     }
 }

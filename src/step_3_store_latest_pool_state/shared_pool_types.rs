@@ -139,7 +139,7 @@ pub struct ConcentratedLiquidityPoolState {
     /// How many decimal places token B uses (USDC = 6, so 1 USDC = 1,000,000 micro-USDC).
     pub token_b_decimals: u8,
 
-    /// Extra accounts only one DEX needs when building a swap instruction (Step 7).
+    /// Extra accounts only one DEX needs when building a swap instruction (Step 6).
     pub dex_specific_swap_accounts: DexSpecificSwapAccounts,
 
     /// Slot (Solana's block-height clock, ~400ms per slot) when this state was seen.
@@ -156,7 +156,7 @@ pub struct ConcentratedLiquidityPoolState {
 ///
 /// **Why an enum:** the shared fields above are enough to *quote* a swap, but
 /// each DEX's swap instruction also asks for a few accounts of its own. Keeping
-/// them here means Step 7 never has to re-read the raw pool bytes.
+/// them here means Step 6 never has to re-read the raw pool bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DexSpecificSwapAccounts {
     /// Orca derives everything else (oracle, tick arrays) from the pool address.

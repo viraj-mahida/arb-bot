@@ -22,8 +22,8 @@ use solana_pubkey::Pubkey;
 use solana_signer::Signer;
 
 use super::well_known_program_addresses::{
-    ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ADDRESS, SYSTEM_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS, program, pubkey,
-    read_only, read_only_program, writable,
+    ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ADDRESS, SYSTEM_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS,
+    program, pubkey, read_only, read_only_program, writable,
 };
 use crate::step_3_store_latest_pool_state::PublicKeyBytes;
 
@@ -64,7 +64,10 @@ impl TradingWallet {
 /// Address of the ATA for (`owner`, `mint`), for mints on the classic token program.
 ///
 /// Seeds are `[owner, token_program, mint]` under the ATA program.
-pub fn associated_token_account_address(owner: &PublicKeyBytes, mint: &PublicKeyBytes) -> PublicKeyBytes {
+pub fn associated_token_account_address(
+    owner: &PublicKeyBytes,
+    mint: &PublicKeyBytes,
+) -> PublicKeyBytes {
     let token_program = program(TOKEN_PROGRAM_ADDRESS);
     let (address, _bump) = Pubkey::find_program_address(
         &[owner.as_ref(), token_program.as_ref(), mint.as_ref()],
@@ -112,11 +115,19 @@ pub fn transfer_sol(from: &PublicKeyBytes, to: &PublicKeyBytes, lamports: u64) -
 
 /// Wrap SOL: send lamports into the wSOL token account, then `sync_native`
 /// so its token balance counts them.
-pub fn wrap_sol(owner: &PublicKeyBytes, wrapped_sol_token_account: &PublicKeyBytes, lamports: u64) -> [Instruction; 2] {
+pub fn wrap_sol(
+    owner: &PublicKeyBytes,
+    wrapped_sol_token_account: &PublicKeyBytes,
+    lamports: u64,
+) -> [Instruction; 2] {
     const SYNC_NATIVE: u8 = 17;
     [
         transfer_sol(owner, wrapped_sol_token_account, lamports),
-        Instruction::new_with_bytes(program(TOKEN_PROGRAM_ADDRESS), &[SYNC_NATIVE], vec![writable(*wrapped_sol_token_account)]),
+        Instruction::new_with_bytes(
+            program(TOKEN_PROGRAM_ADDRESS),
+            &[SYNC_NATIVE],
+            vec![writable(*wrapped_sol_token_account)],
+        ),
     ]
 }
 
@@ -126,6 +137,10 @@ pub fn close_token_account(token_account: &PublicKeyBytes, owner: &PublicKeyByte
     Instruction::new_with_bytes(
         program(TOKEN_PROGRAM_ADDRESS),
         &[CLOSE_ACCOUNT],
-        vec![writable(*token_account), writable(*owner), AccountMeta::new_readonly(pubkey(*owner), true)],
+        vec![
+            writable(*token_account),
+            writable(*owner),
+            AccountMeta::new_readonly(pubkey(*owner), true),
+        ],
     )
 }

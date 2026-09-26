@@ -10,7 +10,8 @@ use solana_instruction::Instruction;
 use super::orca_whirlpool_swap_instruction::orca_whirlpool_swap_v2_instruction;
 use super::raydium_clmm_swap_instruction::raydium_clmm_swap_v2_instruction;
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, DexProgram, PublicKeyBytes, TickArrayAccountWithInitializedTicks,
+    ConcentratedLiquidityPoolState, DexProgram, PublicKeyBytes,
+    TickArrayAccountWithInitializedTicks,
 };
 use crate::step_4_quote_swaps::SwapDirection;
 

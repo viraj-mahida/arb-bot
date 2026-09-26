@@ -19,10 +19,13 @@ pub(super) fn quote_raydium_clmm_swap(
     let mut all_initialized_ticks: Vec<RaydiumInitializedTick> = cached_tick_arrays
         .iter()
         .flat_map(|tick_array| {
-            tick_array.initialized_ticks.iter().map(|tick| RaydiumInitializedTick {
-                tick: tick.tick_index,
-                liquidity_net: tick.liquidity_added_when_price_crosses_upward,
-            })
+            tick_array
+                .initialized_ticks
+                .iter()
+                .map(|tick| RaydiumInitializedTick {
+                    tick: tick.tick_index,
+                    liquidity_net: tick.liquidity_added_when_price_crosses_upward,
+                })
         })
         .collect();
     all_initialized_ticks.sort_by_key(|tick| tick.tick);

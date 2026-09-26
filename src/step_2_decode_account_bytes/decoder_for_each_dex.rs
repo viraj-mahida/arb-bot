@@ -46,11 +46,13 @@ pub fn decode_tick_array_account(
             slot,
             geyser_write_version,
         ),
-        DexProgram::OrcaWhirlpool => orca_whirlpool_account_decoder::decode_orca_tick_array_account(
-            watched_tick_array,
-            account_data,
-            slot,
-            geyser_write_version,
-        ),
+        DexProgram::OrcaWhirlpool => {
+            orca_whirlpool_account_decoder::decode_orca_tick_array_account(
+                watched_tick_array,
+                account_data,
+                slot,
+                geyser_write_version,
+            )
+        }
     }
 }

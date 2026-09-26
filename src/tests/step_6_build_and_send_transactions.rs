@@ -1,32 +1,35 @@
-//! Step 7: cost math, staleness, trade decision, exact instruction bytes, and instruction order.
+//! Step 6: cost math, staleness, trade decision, exact instruction bytes, and instruction order.
 
 use solana_instruction::Instruction;
 use solana_keypair::Keypair;
 
 use super::test_pool_builders::{DEEP_LIQUIDITY, test_pool_at_tick_with_one_empty_tick_array};
 use crate::step_2_decode_account_bytes::raydium_clmm_account_decoder::decode_raydium_fee_config_trade_fee_rate;
+use crate::step_3_store_latest_pool_state::known_program_and_pool_addresses::{
+    ORCA_WHIRLPOOL_PROGRAM_ADDRESS, RAYDIUM_CLMM_PROGRAM_ADDRESS,
+};
 use crate::step_3_store_latest_pool_state::{DexProgram, parse_base58_public_key};
 use crate::step_4_quote_swaps::SwapDirection;
-use crate::step_7_build_and_send_transactions::assemble_arbitrage_transaction::{
+use crate::step_6_build_and_send_transactions::assemble_arbitrage_transaction::{
     FundingSource, MAX_TRANSACTION_SIZE_IN_BYTES, TransactionFeeSettings, arbitrage_instructions,
     compile_and_sign_v0_transaction,
 };
-use crate::step_7_build_and_send_transactions::decide_if_trade_is_worth_it::{
-    ApprovedArbitrageTrade, CacheFreshness, TradeDecisionRules, WhyTradeWasSkipped, check_cache_is_fresh,
-    decide_if_trade_is_worth_it, estimate_transaction_costs,
+use crate::step_6_build_and_send_transactions::decide_if_trade_is_worth_it::{
+    ApprovedArbitrageTrade, CacheFreshness, TradeDecisionRules, WhyTradeWasSkipped,
+    check_cache_is_fresh, decide_if_trade_is_worth_it, estimate_transaction_costs,
 };
-use crate::step_7_build_and_send_transactions::flash_loan_instructions::{FlashLoanProvider, KaminoFlashLoanAccounts};
-use crate::step_7_build_and_send_transactions::orca_whirlpool_swap_instruction::orca_oracle_address;
-use crate::step_7_build_and_send_transactions::swap_leg_instruction::{
+use crate::step_6_build_and_send_transactions::flash_loan_instructions::{
+    FlashLoanProvider, KaminoFlashLoanAccounts,
+};
+use crate::step_6_build_and_send_transactions::orca_whirlpool_swap_instruction::orca_oracle_address;
+use crate::step_6_build_and_send_transactions::swap_leg_instruction::{
     SWAP_V2_ANCHOR_DISCRIMINATOR, SwapLeg, build_swap_instruction,
 };
-use crate::step_7_build_and_send_transactions::trading_wallet::TradingWallet;
-use crate::step_7_build_and_send_transactions::well_known_program_addresses::{
-    ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ADDRESS, COMPUTE_BUDGET_PROGRAM_ADDRESS, KAMINO_LEND_PROGRAM_ADDRESS,
-    SYSTEM_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS, WRAPPED_SOL_MINT_ADDRESS, program,
-};
-use crate::step_3_store_latest_pool_state::known_program_and_pool_addresses::{
-    ORCA_WHIRLPOOL_PROGRAM_ADDRESS, RAYDIUM_CLMM_PROGRAM_ADDRESS,
+use crate::step_6_build_and_send_transactions::trading_wallet::TradingWallet;
+use crate::step_6_build_and_send_transactions::well_known_program_addresses::{
+    ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ADDRESS, COMPUTE_BUDGET_PROGRAM_ADDRESS,
+    KAMINO_LEND_PROGRAM_ADDRESS, SYSTEM_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS,
+    WRAPPED_SOL_MINT_ADDRESS, program,
 };
 
 fn test_rules() -> TradeDecisionRules {
@@ -44,13 +47,18 @@ fn test_rules() -> TradeDecisionRules {
 }
 
 fn fresh_cache() -> CacheFreshness {
-    CacheFreshness { newest_slot_seen_from_stream: 1, milliseconds_since_last_stream_update: Some(10) }
+    CacheFreshness {
+        newest_slot_seen_from_stream: 1,
+        milliseconds_since_last_stream_update: Some(10),
+    }
 }
 
 /// Orca priced ~1% above Raydium: selling SOL on Orca and buying it back on Raydium pays.
 fn profitable_trade(rules: &TradeDecisionRules) -> ApprovedArbitrageTrade {
-    let (mut orca, orca_tick_array) = test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 100);
-    let (mut raydium, raydium_tick_array) = test_pool_at_tick_with_one_empty_tick_array(DexProgram::RaydiumClmm, DEEP_LIQUIDITY, 0);
+    let (mut orca, orca_tick_array) =
+        test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 100);
+    let (mut raydium, raydium_tick_array) =
+        test_pool_at_tick_with_one_empty_tick_array(DexProgram::RaydiumClmm, DEEP_LIQUIDITY, 0);
     for pool in [&mut orca, &mut raydium] {
         pool.token_a_mint = parse_base58_public_key(WRAPPED_SOL_MINT_ADDRESS);
         pool.token_b_mint = [7u8; 32];
@@ -58,12 +66,22 @@ fn profitable_trade(rules: &TradeDecisionRules) -> ApprovedArbitrageTrade {
     raydium.pool_address = [9u8; 32];
     let mut raydium_tick_array = raydium_tick_array;
     raydium_tick_array.pool_address = raydium.pool_address;
-    decide_if_trade_is_worth_it(&orca, &[orca_tick_array], &raydium, &[raydium_tick_array], fresh_cache(), rules)
-        .expect("a 1% gap with deep liquidity should be approved")
+    decide_if_trade_is_worth_it(
+        &orca,
+        &[orca_tick_array],
+        &raydium,
+        &[raydium_tick_array],
+        fresh_cache(),
+        rules,
+    )
+    .expect("a 1% gap with deep liquidity should be approved")
 }
 
 fn program_ids(instructions: &[Instruction]) -> Vec<String> {
-    instructions.iter().map(|instruction| instruction.program_id.to_string()).collect()
+    instructions
+        .iter()
+        .map(|instruction| instruction.program_id.to_string())
+        .collect()
 }
 
 /// Every cost is added, and fractions of a lamport round up.
@@ -76,23 +94,48 @@ fn transaction_costs_add_signature_priority_tip_and_flash_fees() {
     assert_eq!(costs.flash_loan_fee, 1_000_000); // 10 bps of 1 SOL
     assert_eq!(costs.total(), 1_019_000);
 
-    let one_lamport_loan = estimate_transaction_costs(&TradeDecisionRules { flash_loan_fee_in_basis_points: 1, ..test_rules() }, 1);
+    let one_lamport_loan = estimate_transaction_costs(
+        &TradeDecisionRules {
+            flash_loan_fee_in_basis_points: 1,
+            ..test_rules()
+        },
+        1,
+    );
     assert_eq!(one_lamport_loan.flash_loan_fee, 1);
 }
 
 /// A quiet stream or an old pool blocks trading; fresh data passes.
 #[test]
 fn stale_data_is_refused() {
-    let (pool, _) = test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 0);
+    let (pool, _) =
+        test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 0);
     let rules = test_rules();
-    let never_heard = CacheFreshness { newest_slot_seen_from_stream: 0, milliseconds_since_last_stream_update: None };
-    assert!(matches!(check_cache_is_fresh(&[&pool], never_heard, &rules), Err(WhyTradeWasSkipped::NoStreamUpdateYet)));
-    let silent = CacheFreshness { newest_slot_seen_from_stream: 1, milliseconds_since_last_stream_update: Some(5_000) };
-    assert!(matches!(check_cache_is_fresh(&[&pool], silent, &rules), Err(WhyTradeWasSkipped::StreamSilentTooLong { .. })));
-    let pool_far_behind = CacheFreshness { newest_slot_seen_from_stream: 1_000, milliseconds_since_last_stream_update: Some(10) };
+    let never_heard = CacheFreshness {
+        newest_slot_seen_from_stream: 0,
+        milliseconds_since_last_stream_update: None,
+    };
+    assert!(matches!(
+        check_cache_is_fresh(&[&pool], never_heard, &rules),
+        Err(WhyTradeWasSkipped::NoStreamUpdateYet)
+    ));
+    let silent = CacheFreshness {
+        newest_slot_seen_from_stream: 1,
+        milliseconds_since_last_stream_update: Some(5_000),
+    };
+    assert!(matches!(
+        check_cache_is_fresh(&[&pool], silent, &rules),
+        Err(WhyTradeWasSkipped::StreamSilentTooLong { .. })
+    ));
+    let pool_far_behind = CacheFreshness {
+        newest_slot_seen_from_stream: 1_000,
+        milliseconds_since_last_stream_update: Some(10),
+    };
     assert!(matches!(
         check_cache_is_fresh(&[&pool], pool_far_behind, &rules),
-        Err(WhyTradeWasSkipped::PoolStateTooOld { age_in_slots: 999, .. })
+        Err(WhyTradeWasSkipped::PoolStateTooOld {
+            age_in_slots: 999,
+            ..
+        })
     ));
     assert!(check_cache_is_fresh(&[&pool], fresh_cache(), &rules).is_ok());
 }
@@ -100,10 +143,18 @@ fn stale_data_is_refused() {
 /// Same price on both pools: fees alone make the round trip lose, so no trade.
 #[test]
 fn equal_prices_are_not_traded() {
-    let (orca, orca_tick_array) = test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 0);
-    let (raydium, raydium_tick_array) = test_pool_at_tick_with_one_empty_tick_array(DexProgram::RaydiumClmm, DEEP_LIQUIDITY, 0);
-    let decision =
-        decide_if_trade_is_worth_it(&orca, &[orca_tick_array], &raydium, &[raydium_tick_array], fresh_cache(), &test_rules());
+    let (orca, orca_tick_array) =
+        test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 0);
+    let (raydium, raydium_tick_array) =
+        test_pool_at_tick_with_one_empty_tick_array(DexProgram::RaydiumClmm, DEEP_LIQUIDITY, 0);
+    let decision = decide_if_trade_is_worth_it(
+        &orca,
+        &[orca_tick_array],
+        &raydium,
+        &[raydium_tick_array],
+        fresh_cache(),
+        &test_rules(),
+    );
     assert!(decision.is_err());
 }
 
@@ -114,7 +165,10 @@ fn approved_trade_is_capped_and_guarded_by_minimum_output() {
     let trade = profitable_trade(&rules);
     assert!(trade.size_was_capped);
     assert_eq!(trade.start_token_amount_in, rules.max_trade_input_lamports);
-    assert_eq!(trade.leg_2_bridge_token_amount_in, trade.leg_1_minimum_bridge_token_out);
+    assert_eq!(
+        trade.leg_2_bridge_token_amount_in,
+        trade.leg_1_minimum_bridge_token_out
+    );
     assert_eq!(
         trade.leg_2_minimum_start_token_out,
         trade.start_token_amount_in + trade.costs.total() + rules.min_profit_after_costs_lamports
@@ -126,7 +180,8 @@ fn approved_trade_is_capped_and_guarded_by_minimum_output() {
 /// Orca `swap_v2`: exact data bytes and the signer / pool / oracle positions.
 #[test]
 fn orca_swap_instruction_has_exact_bytes_and_account_order() {
-    let (pool, tick_array) = test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 0);
+    let (pool, tick_array) =
+        test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 0);
     let instruction = build_swap_instruction(&SwapLeg {
         pool: &pool,
         cached_tick_arrays: &[tick_array],
@@ -143,7 +198,10 @@ fn orca_swap_instruction_has_exact_bytes_and_account_order() {
     expected_data.extend_from_slice(&0u128.to_le_bytes());
     expected_data.extend_from_slice(&[1, 1, 0]);
     assert_eq!(instruction.data, expected_data);
-    assert_eq!(instruction.program_id, program(ORCA_WHIRLPOOL_PROGRAM_ADDRESS));
+    assert_eq!(
+        instruction.program_id,
+        program(ORCA_WHIRLPOOL_PROGRAM_ADDRESS)
+    );
     assert_eq!(instruction.accounts.len(), 15);
     assert!(instruction.accounts[3].is_signer);
     assert_eq!(instruction.accounts[3].pubkey.to_bytes(), [5u8; 32]);
@@ -151,13 +209,17 @@ fn orca_swap_instruction_has_exact_bytes_and_account_order() {
     assert_eq!(instruction.accounts[4].pubkey.to_bytes(), pool.pool_address);
     assert_eq!(instruction.accounts[7].pubkey.to_bytes(), [6u8; 32]);
     assert_eq!(instruction.accounts[9].pubkey.to_bytes(), [8u8; 32]);
-    assert_eq!(instruction.accounts[14].pubkey.to_bytes(), orca_oracle_address(&pool.pool_address));
+    assert_eq!(
+        instruction.accounts[14].pubkey.to_bytes(),
+        orca_oracle_address(&pool.pool_address)
+    );
 }
 
 /// Raydium `swap_v2`: 41 data bytes, and for b→a the input side is token B.
 #[test]
 fn raydium_swap_instruction_orders_accounts_by_input_and_output() {
-    let (pool, tick_array) = test_pool_at_tick_with_one_empty_tick_array(DexProgram::RaydiumClmm, DEEP_LIQUIDITY, 0);
+    let (pool, tick_array) =
+        test_pool_at_tick_with_one_empty_tick_array(DexProgram::RaydiumClmm, DEEP_LIQUIDITY, 0);
     let instruction = build_swap_instruction(&SwapLeg {
         pool: &pool,
         cached_tick_arrays: std::slice::from_ref(&tick_array),
@@ -168,7 +230,10 @@ fn raydium_swap_instruction_orders_accounts_by_input_and_output() {
         wallet_token_a_account: [6u8; 32],
         wallet_token_b_account: [8u8; 32],
     });
-    assert_eq!(instruction.program_id, program(RAYDIUM_CLMM_PROGRAM_ADDRESS));
+    assert_eq!(
+        instruction.program_id,
+        program(RAYDIUM_CLMM_PROGRAM_ADDRESS)
+    );
     assert_eq!(instruction.data.len(), 41);
     assert_eq!(&instruction.data[..8], &SWAP_V2_ANCHOR_DISCRIMINATOR);
     assert_eq!(&instruction.data[8..16], &5_000u64.to_le_bytes());
@@ -180,7 +245,10 @@ fn raydium_swap_instruction_orders_accounts_by_input_and_output() {
     assert_eq!(instruction.accounts[4].pubkey.to_bytes(), [6u8; 32]); // output = wallet's token A
     assert_eq!(instruction.accounts[7].pubkey.to_bytes(), [4u8; 32]); // observation
     assert_eq!(instruction.accounts.len(), 14); // 13 fixed + 1 cached tick array
-    assert_eq!(instruction.accounts[13].pubkey.to_bytes(), tick_array.tick_array_address);
+    assert_eq!(
+        instruction.accounts[13].pubkey.to_bytes(),
+        tick_array.tick_array_address
+    );
 }
 
 /// Wallet mode: budget, ATAs, wrap, two swaps, unwrap, tip — in that order — and it fits.
@@ -208,8 +276,9 @@ fn wallet_funded_transaction_has_expected_instruction_order() {
     ];
     assert_eq!(program_ids(&instructions), expected.map(String::from));
 
-    let transaction = compile_and_sign_v0_transaction(&wallet, &instructions, &[], solana_hash::Hash::default())
-        .expect("wallet-mode transaction should fit without a lookup table");
+    let transaction =
+        compile_and_sign_v0_transaction(&wallet, &instructions, &[], solana_hash::Hash::default())
+            .expect("wallet-mode transaction should fit without a lookup table");
     assert!(transaction.wire_bytes.len() <= MAX_TRANSACTION_SIZE_IN_BYTES);
     assert_eq!(transaction.wire_bytes[0], 1);
 }
@@ -227,8 +296,13 @@ fn flash_loan_transaction_borrows_first_and_repays_after_both_legs() {
         reserve_supply_vault: [23u8; 32],
         reserve_fee_vault: [24u8; 32],
     });
-    let fees = TransactionFeeSettings { compute_unit_limit: 400_000, priority_fee_micro_lamports_per_compute_unit: 0, jito_tip: None };
-    let instructions = arbitrage_instructions(&wallet, &trade, &FundingSource::FlashLoan(&provider), &fees);
+    let fees = TransactionFeeSettings {
+        compute_unit_limit: 400_000,
+        priority_fee_micro_lamports_per_compute_unit: 0,
+        jito_tip: None,
+    };
+    let instructions =
+        arbitrage_instructions(&wallet, &trade, &FundingSource::FlashLoan(&provider), &fees);
     let expected = [
         COMPUTE_BUDGET_PROGRAM_ADDRESS,
         COMPUTE_BUDGET_PROGRAM_ADDRESS,
@@ -242,8 +316,15 @@ fn flash_loan_transaction_borrows_first_and_repays_after_both_legs() {
     ];
     assert_eq!(program_ids(&instructions), expected.map(String::from));
     let repay = &instructions[7];
-    assert_eq!(*repay.data.last().unwrap(), 4, "repay must name the borrow's instruction index");
-    assert_eq!(&repay.data[8..16], &trade.start_token_amount_in.to_le_bytes());
+    assert_eq!(
+        *repay.data.last().unwrap(),
+        4,
+        "repay must name the borrow's instruction index"
+    );
+    assert_eq!(
+        &repay.data[8..16],
+        &trade.start_token_amount_in.to_le_bytes()
+    );
 }
 
 /// Raydium's fee lives at byte 47 of its `amm_config` account.
@@ -251,8 +332,14 @@ fn flash_loan_transaction_borrows_first_and_repays_after_both_legs() {
 fn raydium_fee_config_fee_is_read_from_byte_47() {
     let mut account_data = vec![0u8; 117];
     account_data[47..51].copy_from_slice(&500u32.to_le_bytes());
-    assert_eq!(decode_raydium_fee_config_trade_fee_rate(&account_data), Some(500));
-    assert_eq!(decode_raydium_fee_config_trade_fee_rate(&account_data[..40]), None);
+    assert_eq!(
+        decode_raydium_fee_config_trade_fee_rate(&account_data),
+        Some(500)
+    );
+    assert_eq!(
+        decode_raydium_fee_config_trade_fee_rate(&account_data[..40]),
+        None
+    );
 }
 
 /// A Kamino reserve must belong to the configured market and lend wrapped SOL.
@@ -264,8 +351,13 @@ fn kamino_reserve_is_validated_before_use() {
     reserve_data[128..160].copy_from_slice(&parse_base58_public_key(WRAPPED_SOL_MINT_ADDRESS));
     reserve_data[160..192].copy_from_slice(&[23u8; 32]);
     reserve_data[192..224].copy_from_slice(&[24u8; 32]);
-    let accounts = KaminoFlashLoanAccounts::from_reserve_account_bytes(market, [22u8; 32], &reserve_data).unwrap();
+    let accounts =
+        KaminoFlashLoanAccounts::from_reserve_account_bytes(market, [22u8; 32], &reserve_data)
+            .unwrap();
     assert_eq!(accounts.reserve_supply_vault, [23u8; 32]);
     assert_eq!(accounts.reserve_fee_vault, [24u8; 32]);
-    assert!(KaminoFlashLoanAccounts::from_reserve_account_bytes([99u8; 32], [22u8; 32], &reserve_data).is_err());
+    assert!(
+        KaminoFlashLoanAccounts::from_reserve_account_bytes([99u8; 32], [22u8; 32], &reserve_data)
+            .is_err()
+    );
 }

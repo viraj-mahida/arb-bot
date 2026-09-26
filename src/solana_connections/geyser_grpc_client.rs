@@ -19,8 +19,8 @@ use yellowstone_grpc_proto::geyser::{
     CommitmentLevel, SubscribeRequest, SubscribeRequestFilterAccounts,
 };
 
+use crate::print_logs;
 use crate::step_3_store_latest_pool_state::WatchedPools;
-use crate::step_6_print_logs;
 
 /// The half of the connection we write subscription requests into.
 pub type GeyserSubscriptionSender = SubscribeRequestSink;
@@ -35,7 +35,7 @@ pub async fn connect_to_geyser_grpc(
     let grpc_url = std::env::var("GRPC_URL").expect("GRPC_URL missing from environment / .env");
     let access_token = std::env::var("X_TOKEN").expect("X_TOKEN missing from environment / .env");
 
-    step_6_print_logs::geyser_connecting();
+    print_logs::geyser_connecting();
     let mut client_builder = GeyserGrpcClient::build_from_shared(grpc_url.clone())
         .expect("failed to create gRPC client");
 
@@ -49,15 +49,20 @@ pub async fn connect_to_geyser_grpc(
         .x_token(Some(access_token.as_str()))
         .expect("failed to set X-token");
 
-    let mut client = client_builder.connect().await.expect("failed to connect to gRPC");
-    let (mut subscription_sender, account_update_stream) =
-        client.subscribe().await.expect("failed to open gRPC subscription");
+    let mut client = client_builder
+        .connect()
+        .await
+        .expect("failed to connect to gRPC");
+    let (mut subscription_sender, account_update_stream) = client
+        .subscribe()
+        .await
+        .expect("failed to open gRPC subscription");
 
     let pool_addresses = watched_pools.pool_addresses_to_subscribe();
     subscribe_to_account_updates(&mut subscription_sender, pool_addresses.clone())
         .await
         .expect("failed to send subscribe request");
-    step_6_print_logs::geyser_subscribed(pool_addresses.len());
+    print_logs::geyser_subscribed(pool_addresses.len());
 
     Ok((subscription_sender, account_update_stream))
 }

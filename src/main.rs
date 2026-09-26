@@ -46,12 +46,12 @@
 //! 3. [`step_3_store_latest_pool_state`] — shared types + in-memory cache
 //! 4. [`step_4_quote_swaps`] — AMM/CLMM math, one swap, a round trip
 //! 5. [`step_5_find_best_arbitrage_size`] — the profit-maximizing trade size
-//! 6. [`step_6_print_logs`] — everything printed to the terminal
-//! 7. [`step_7_build_and_send_transactions`] — costs, swap instructions, flash
+//! 6. [`step_6_build_and_send_transactions`] — costs, swap instructions, flash
 //!    loan, Jito tip, sign, simulate, send
 //!
-//! Trading settings (wallet, funding mode, limits, fees) are all in
-//! [`bot_settings`]; see `.env.example`.
+//! Terminal output is formatted in [`print_logs`]. It is not a numbered step:
+//! the steps (and the connections) call it whenever they have something to
+//! show. Trading settings are in [`bot_settings`]; see `.env.example`.
 //!
 //! ## Roadmap — not built yet
 //!
@@ -64,17 +64,17 @@ use crate::bot_settings::BotSettingsFromEnvironment;
 use crate::solana_connections::{SolanaRpcClient, connect_to_geyser_grpc};
 use crate::step_1_listen_to_account_updates::process_account_updates_forever;
 use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, WatchedPools};
-use crate::step_7_build_and_send_transactions::ArbitrageTradeExecutor;
+use crate::step_6_build_and_send_transactions::ArbitrageTradeExecutor;
 
 pub(crate) mod bot_settings;
+pub(crate) mod print_logs;
 pub(crate) mod solana_connections;
 pub(crate) mod step_1_listen_to_account_updates;
 pub(crate) mod step_2_decode_account_bytes;
 pub(crate) mod step_3_store_latest_pool_state;
 pub(crate) mod step_4_quote_swaps;
 pub(crate) mod step_5_find_best_arbitrage_size;
-pub(crate) mod step_6_print_logs;
-pub(crate) mod step_7_build_and_send_transactions;
+pub(crate) mod step_6_build_and_send_transactions;
 
 #[cfg(test)]
 mod tests;
@@ -90,23 +90,27 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     let watched_pools = WatchedPools::sol_usdc_pools_on_orca_and_raydium();
-    step_6_print_logs::startup_banner(&watched_pools);
+    print_logs::startup_banner(&watched_pools);
     let cache = LatestPoolStateCache::new();
     let rpc_client = SolanaRpcClient::from_env();
-    step_6_print_logs::rpc_client_ready();
+    print_logs::rpc_client_ready();
 
-    let trade_executor = match ArbitrageTradeExecutor::prepare(BotSettingsFromEnvironment::from_env(), &rpc_client).await {
-        Ok(Some(executor)) => Some(executor),
-        Ok(None) => {
-            step_6_print_logs::trading_disabled("WALLET_KEYPAIR_PATH not set");
-            None
-        }
-        Err(error) => panic!("trading is configured but could not start: {error}"),
-    };
+    let trade_executor =
+        match ArbitrageTradeExecutor::prepare(BotSettingsFromEnvironment::from_env(), &rpc_client)
+            .await
+        {
+            Ok(Some(executor)) => Some(executor),
+            Ok(None) => {
+                print_logs::trading_disabled("WALLET_KEYPAIR_PATH not set");
+                None
+            }
+            Err(error) => panic!("trading is configured but could not start: {error}"),
+        };
 
-    let (geyser_subscription_sender, geyser_account_update_stream) = connect_to_geyser_grpc(&watched_pools)
-        .await
-        .expect("failed to open Geyser stream");
+    let (geyser_subscription_sender, geyser_account_update_stream) =
+        connect_to_geyser_grpc(&watched_pools)
+            .await
+            .expect("failed to open Geyser stream");
     process_account_updates_forever(
         geyser_account_update_stream,
         geyser_subscription_sender,

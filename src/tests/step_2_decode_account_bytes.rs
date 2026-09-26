@@ -1,6 +1,7 @@
 use crate::step_2_decode_account_bytes::orca_whirlpool_account_decoder::{
-    ORCA_TICK_ARRAY_ACCOUNT_SIZE_IN_BYTES, ORCA_TICK_ARRAY_DISCRIMINATOR, ORCA_TICK_ARRAY_FIRST_TICK_SLOT_AT_BYTE,
-    ORCA_TICK_ARRAY_POOL_ADDRESS_AT_BYTE, decode_orca_tick_array_account,
+    ORCA_TICK_ARRAY_ACCOUNT_SIZE_IN_BYTES, ORCA_TICK_ARRAY_DISCRIMINATOR,
+    ORCA_TICK_ARRAY_FIRST_TICK_SLOT_AT_BYTE, ORCA_TICK_ARRAY_POOL_ADDRESS_AT_BYTE,
+    decode_orca_tick_array_account,
 };
 use crate::step_2_decode_account_bytes::raydium_clmm_account_decoder::{
     RAYDIUM_TICK_ARRAY_DISCRIMINATOR, RAYDIUM_TICK_ARRAY_FIRST_TICK_SLOT_AT_BYTE,
@@ -27,11 +28,15 @@ fn orca_tick_array_with_one_initialized_slot_decodes_that_tick() {
         start_tick_index: 176,
         tick_spacing: 2,
     };
-    let tick_array = decode_orca_tick_array_account(&watched_tick_array, &account_data, 1, 1).unwrap();
+    let tick_array =
+        decode_orca_tick_array_account(&watched_tick_array, &account_data, 1, 1).unwrap();
     assert_eq!(tick_array.start_tick_index, 176);
     assert_eq!(tick_array.initialized_ticks.len(), 1);
     assert_eq!(tick_array.initialized_ticks[0].tick_index, 176);
-    assert_eq!(tick_array.initialized_ticks[0].liquidity_added_when_price_crosses_upward, 1_000);
+    assert_eq!(
+        tick_array.initialized_ticks[0].liquidity_added_when_price_crosses_upward,
+        1_000
+    );
 }
 
 /// Raydium slots are initialized when `liquidity_gross > 0`, and store their own tick index.
@@ -54,8 +59,12 @@ fn raydium_tick_array_with_one_initialized_slot_decodes_that_tick() {
         start_tick_index: 0,
         tick_spacing: 1,
     };
-    let tick_array = decode_raydium_tick_array_account(&watched_tick_array, &account_data, 1, 1).unwrap();
+    let tick_array =
+        decode_raydium_tick_array_account(&watched_tick_array, &account_data, 1, 1).unwrap();
     assert_eq!(tick_array.initialized_ticks.len(), 1);
     assert_eq!(tick_array.initialized_ticks[0].tick_index, 64);
-    assert_eq!(tick_array.initialized_ticks[0].liquidity_added_when_price_crosses_upward, -500);
+    assert_eq!(
+        tick_array.initialized_ticks[0].liquidity_added_when_price_crosses_upward,
+        -500
+    );
 }

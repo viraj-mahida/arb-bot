@@ -2,7 +2,8 @@
 
 use crate::step_3_store_latest_pool_state::tick_array_pda_derivation::tick_array_start_index_containing_tick;
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, DexProgram, DexSpecificSwapAccounts, TickArrayAccountWithInitializedTicks,
+    ConcentratedLiquidityPoolState, DexProgram, DexSpecificSwapAccounts,
+    TickArrayAccountWithInitializedTicks,
 };
 
 /// Very deep liquidity, so a 0.1 SOL trade barely moves the price.
@@ -23,7 +24,10 @@ fn tick_spacing_for(dex: DexProgram) -> u16 {
 pub fn test_pool_with_one_empty_tick_array(
     dex: DexProgram,
     liquidity: u128,
-) -> (ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks) {
+) -> (
+    ConcentratedLiquidityPoolState,
+    TickArrayAccountWithInitializedTicks,
+) {
     let tick_a_few_steps_inside_the_array = i32::from(tick_spacing_for(dex)) * 4;
     test_pool_at_tick_with_one_empty_tick_array(dex, liquidity, tick_a_few_steps_inside_the_array)
 }
@@ -34,7 +38,10 @@ pub fn test_pool_at_tick_with_one_empty_tick_array(
     dex: DexProgram,
     liquidity: u128,
     current_tick_index: i32,
-) -> (ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks) {
+) -> (
+    ConcentratedLiquidityPoolState,
+    TickArrayAccountWithInitializedTicks,
+) {
     let tick_spacing = tick_spacing_for(dex);
     let ticks_covered_by_one_array = dex.ticks_per_tick_array() * i32::from(tick_spacing);
     let pool = ConcentratedLiquidityPoolState {
@@ -65,7 +72,10 @@ pub fn test_pool_at_tick_with_one_empty_tick_array(
         tick_array_address: [2u8; 32],
         pool_address: pool.pool_address,
         dex,
-        start_tick_index: tick_array_start_index_containing_tick(current_tick_index, ticks_covered_by_one_array),
+        start_tick_index: tick_array_start_index_containing_tick(
+            current_tick_index,
+            ticks_covered_by_one_array,
+        ),
         initialized_ticks: Vec::new(),
         slot: 1,
         geyser_write_version_for_ordering: 1,

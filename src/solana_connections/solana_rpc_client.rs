@@ -4,7 +4,7 @@
 //! Raydium fee configs, the Kamino reserve, lookup tables), because Geyser only
 //! streams changes that happen after we subscribe.
 //!
-//! **Trading (Step 7):**
+//! **Trading (Step 6):**
 //! - `getLatestBlockhash` — every transaction must name a recent blockhash
 //!   (~60–90 s validity) so validators know it is fresh and not a replay.
 //! - `simulateTransaction` — dry-run on the node: would it succeed, how many
@@ -44,7 +44,10 @@ impl SolanaRpcClient {
             .timeout(RPC_REQUEST_TIMEOUT)
             .build()
             .expect("failed to build HTTP client for RPC");
-        Self { rpc_url, http_client }
+        Self {
+            rpc_url,
+            http_client,
+        }
     }
 
     /// Call the `getMultipleAccounts` RPC method: fetch many accounts in one request.
@@ -64,8 +67,10 @@ impl SolanaRpcClient {
             return Ok(Vec::new());
         }
 
-        let addresses_base58: Vec<String> =
-            account_addresses.iter().map(encode_public_key_as_base58).collect();
+        let addresses_base58: Vec<String> = account_addresses
+            .iter()
+            .map(encode_public_key_as_base58)
+            .collect();
         let result: GetMultipleAccountsResult = self
             .call(
                 "getMultipleAccounts",
@@ -96,8 +101,12 @@ impl SolanaRpcClient {
 
     /// A recent blockhash (base58) to stamp on a new transaction.
     pub async fn get_latest_blockhash(&self) -> Result<String, String> {
-        let result: ValueWithContext<LatestBlockhashJson> =
-            self.call("getLatestBlockhash", serde_json::json!([{ "commitment": "confirmed" }])).await?;
+        let result: ValueWithContext<LatestBlockhashJson> = self
+            .call(
+                "getLatestBlockhash",
+                serde_json::json!([{ "commitment": "confirmed" }]),
+            )
+            .await?;
         Ok(result.value.blockhash)
     }
 
@@ -136,7 +145,10 @@ impl SolanaRpcClient {
             .await?;
         let simulation = result.value;
         Ok(SimulationOutcome {
-            error: simulation.err.filter(|error| !error.is_null()).map(|error| error.to_string()),
+            error: simulation
+                .err
+                .filter(|error| !error.is_null())
+                .map(|error| error.to_string()),
             logs: simulation.logs.unwrap_or_default(),
             compute_units_consumed: simulation.units_consumed,
             watch_address_lamports_after: simulation
@@ -162,19 +174,38 @@ impl SolanaRpcClient {
     }
 
     /// Status of one signature: `None` = not seen yet.
-    pub async fn get_signature_status(&self, signature_base58: &str) -> Result<Option<SignatureStatus>, String> {
+    pub async fn get_signature_status(
+        &self,
+        signature_base58: &str,
+    ) -> Result<Option<SignatureStatus>, String> {
         let result: ValueWithContext<Vec<Option<SignatureStatusJson>>> = self
-            .call("getSignatureStatuses", serde_json::json!([[signature_base58]]))
+            .call(
+                "getSignatureStatuses",
+                serde_json::json!([[signature_base58]]),
+            )
             .await?;
-        Ok(result.value.into_iter().next().flatten().map(|status| SignatureStatus {
-            error: status.err.filter(|error| !error.is_null()).map(|error| error.to_string()),
-            confirmation_status: status.confirmation_status.unwrap_or_default(),
-        }))
+        Ok(result
+            .value
+            .into_iter()
+            .next()
+            .flatten()
+            .map(|status| SignatureStatus {
+                error: status
+                    .err
+                    .filter(|error| !error.is_null())
+                    .map(|error| error.to_string()),
+                confirmation_status: status.confirmation_status.unwrap_or_default(),
+            }))
     }
 
     /// Send one JSON-RPC request and decode its `result`.
-    async fn call<T: DeserializeOwned>(&self, method: &str, params: serde_json::Value) -> Result<T, String> {
-        let request = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
+    async fn call<T: DeserializeOwned>(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<T, String> {
+        let request =
+            serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
         let response: JsonRpcResponse<T> = self
             .http_client
             .post(&self.rpc_url)
@@ -190,7 +221,9 @@ impl SolanaRpcClient {
         if let Some(error) = response.error {
             return Err(format!("{method}: {error}"));
         }
-        response.result.ok_or_else(|| format!("{method}: response missing result"))
+        response
+            .result
+            .ok_or_else(|| format!("{method}: response missing result"))
     }
 }
 
