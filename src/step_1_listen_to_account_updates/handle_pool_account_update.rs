@@ -1,6 +1,7 @@
 //! What to do when a pool account changes (usually because someone swapped).
 
 use super::account_update_loop::AccountUpdateListener;
+use super::load_raydium_fee_config::apply_raydium_fee_from_fee_config;
 use super::load_tick_arrays_not_yet_streamed::load_tick_arrays_not_yet_streamed;
 use crate::solana_connections::subscribe_to_account_updates;
 use crate::step_2_decode_account_bytes::decode_pool_account;
@@ -14,6 +15,7 @@ impl AccountUpdateListener<'_> {
     /// 2. Work out which tick arrays surround the (possibly new) price.
     /// 3. For any we were not watching yet: subscribe on Geyser and load them once via RPC.
     /// 4. Print a snapshot of all pools plus fresh arbitrage quotes.
+    /// 5. If trading is configured, let Step 7 decide whether to trade.
     pub(super) async fn handle_pool_account_update(
         &mut self,
         pool_config: &WatchedPoolConfig,
@@ -21,10 +23,11 @@ impl AccountUpdateListener<'_> {
         slot: u64,
         geyser_write_version: u64,
     ) {
-        let Some(pool_state) = decode_pool_account(pool_config, account_data, slot, geyser_write_version) else {
+        let Some(mut pool_state) = decode_pool_account(pool_config, account_data, slot, geyser_write_version) else {
             step_6_print_logs::pool_decode_failed(pool_config.dex, pool_config.pool_address_base58);
             return;
         };
+        apply_raydium_fee_from_fee_config(self.rpc_client, self.cache, &mut pool_state).await;
 
         let tick_arrays_near_price = tick_array_pdas_near_current_price(&pool_state);
         self.cache.save_pool_state(pool_state.clone());
@@ -49,5 +52,8 @@ impl AccountUpdateListener<'_> {
         }
 
         step_6_print_logs::pool_snapshot_and_arbitrage_quotes(self.cache);
+        if let Some(trade_executor) = &self.trade_executor {
+            trade_executor.consider_trading(self.cache);
+        }
     }
 }

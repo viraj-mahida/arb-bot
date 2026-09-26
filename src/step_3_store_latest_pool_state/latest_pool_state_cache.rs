@@ -9,7 +9,9 @@
 //! writer (a new Geyser update) briefly takes exclusive access.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::time::Instant;
 
 use super::shared_pool_types::{
     ConcentratedLiquidityPoolState, DexProgram, TickArrayAccountWithInitializedTicks,
@@ -17,7 +19,7 @@ use super::shared_pool_types::{
 };
 use super::solana_public_key_helpers::PublicKeyBytes;
 
-/// Three lookup tables, all keyed by account address.
+/// Lookup tables keyed by account address, plus "how fresh is the stream" clocks.
 #[derive(Debug, Default)]
 pub struct LatestPoolStateCache {
     /// Newest decoded state of each watched pool.
@@ -27,6 +29,14 @@ pub struct LatestPoolStateCache {
     watched_tick_array_by_address: RwLock<HashMap<PublicKeyBytes, TickArrayPdaToWatch>>,
     /// Newest decoded contents of each tick array we have received.
     tick_array_by_address: RwLock<HashMap<PublicKeyBytes, TickArrayAccountWithInitializedTicks>>,
+    /// Raydium swap fee (millionths) keyed by `amm_config` address. Fee tiers
+    /// practically never change, so each config is read once via RPC.
+    raydium_fee_rate_by_fee_config_address: RwLock<HashMap<PublicKeyBytes, u16>>,
+    /// Highest slot number any Geyser message has shown us: "what time is it on-chain".
+    newest_slot_seen_from_stream: AtomicU64,
+    /// Wall-clock time of the last Geyser account message. If the stream goes
+    /// quiet, every cached price may be out of date, so trading must pause.
+    last_stream_update_received_at: RwLock<Option<Instant>>,
 }
 
 impl LatestPoolStateCache {
@@ -34,9 +44,16 @@ impl LatestPoolStateCache {
         Self::default()
     }
 
-    /// Store (or overwrite) a pool's newest state.
+    /// Store a pool's state, unless we already hold a newer write (same rule as tick arrays).
     pub fn save_pool_state(&self, pool_state: ConcentratedLiquidityPoolState) {
-        write_lock(&self.pool_state_by_pool_address).insert(pool_state.pool_address, pool_state);
+        let mut pools = write_lock(&self.pool_state_by_pool_address);
+        if let Some(existing) = pools.get(&pool_state.pool_address)
+            && (existing.slot, existing.geyser_write_version_for_ordering)
+                > (pool_state.slot, pool_state.geyser_write_version_for_ordering)
+        {
+            return;
+        }
+        pools.insert(pool_state.pool_address, pool_state);
     }
 
     /// Look a pool up by its address. This is the lookup multi-pool code should use.
@@ -119,6 +136,30 @@ impl LatestPoolStateCache {
             .values()
             .filter(|tick_array| tick_array.pool_address == *pool_address)
             .count()
+    }
+
+    pub fn raydium_fee_rate_for_fee_config(&self, fee_config_address: &PublicKeyBytes) -> Option<u16> {
+        read_lock(&self.raydium_fee_rate_by_fee_config_address).get(fee_config_address).copied()
+    }
+
+    pub fn save_raydium_fee_rate_for_fee_config(&self, fee_config_address: PublicKeyBytes, fee_rate_in_millionths: u16) {
+        write_lock(&self.raydium_fee_rate_by_fee_config_address).insert(fee_config_address, fee_rate_in_millionths);
+    }
+
+    /// Call on every Geyser account message: remembers the newest slot and "now".
+    pub fn record_stream_update(&self, slot: u64) {
+        self.newest_slot_seen_from_stream.fetch_max(slot, Ordering::Relaxed);
+        *write_lock(&self.last_stream_update_received_at) = Some(Instant::now());
+    }
+
+    pub fn newest_slot_seen_from_stream(&self) -> u64 {
+        self.newest_slot_seen_from_stream.load(Ordering::Relaxed)
+    }
+
+    /// Milliseconds since the last Geyser account message (`None` = none yet).
+    pub fn milliseconds_since_last_stream_update(&self) -> Option<u64> {
+        read_lock(&self.last_stream_update_received_at)
+            .map(|received_at| u64::try_from(received_at.elapsed().as_millis()).unwrap_or(u64::MAX))
     }
 }
 

@@ -75,6 +75,17 @@ pub fn tick_array_decode_failed(dex: DexProgram, tick_array_address: &PublicKeyB
     );
 }
 
+pub fn raydium_fee_config_loaded(fee_rate_in_millionths: u16) {
+    println!(
+        "[rpc/fee-config]  raydium_clmm fee from amm_config: {fee_rate_in_millionths} millionths ({:.2} bps)",
+        f64::from(fee_rate_in_millionths) / 100.0
+    );
+}
+
+pub fn raydium_fee_config_load_failed() {
+    eprintln!("[error] could not load Raydium amm_config fee; using the configured fee");
+}
+
 pub fn geyser_stream_error(error: impl std::fmt::Display) {
     eprintln!("[error] Geyser stream: {error}");
 }

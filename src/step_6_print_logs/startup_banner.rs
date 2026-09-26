@@ -3,7 +3,7 @@
 use crate::step_3_store_latest_pool_state::WatchedPools;
 
 pub fn startup_banner(watched_pools: &WatchedPools) {
-    println!("arb-bot  (educational two-pool arbitrage watcher, read-only)");
+    println!("arb-bot  (educational two-pool arbitrage bot; simulate-only unless SEND_TRANSACTIONS=true)");
     println!();
     println!("pipeline");
     println!("  1. listen     Geyser (Yellowstone gRPC) streams live account writes");
@@ -13,7 +13,8 @@ pub fn startup_banner(watched_pools: &WatchedPools) {
     println!("  3. store      in-memory cache holds each pool + its nearby tick arrays");
     println!("  4. quote      local DEX math quotes a 0.1 SOL round trip");
     println!("  5. size       walk both tick books to find the profit-maximizing size");
-    println!("  6. print      these logs (pool fees included; no network fee / tip; no transaction sent)");
+    println!("  6. print      these logs");
+    println!("  7. trade      subtract all costs, build + sign the transaction, simulate, (optionally) send");
     println!();
     println!("watching");
     for pool_config in watched_pools.all_configs() {
@@ -34,6 +35,9 @@ pub fn startup_banner(watched_pools: &WatchedPools) {
     println!("  [snapshot]           both pools as cached now; gap = raydium - orca (USDC per SOL)");
     println!("  [quote 0.1 SOL]      sell 0.1 SOL on one pool, buy SOL back on the other (math only)");
     println!("  [best size]          same round trip at the profit-maximizing size (math only)");
+    println!("  [decide]             after network fee + priority fee + tip + flash fee: trade or skip");
+    println!("  [simulate]           dry-run of the signed transaction on the RPC node");
+    println!("  [send]               real submission (Jito bundle or RPC) and its confirmation");
     println!();
 }
 
@@ -46,7 +50,7 @@ pub fn geyser_subscribed(pool_count: usize) {
 }
 
 pub fn rpc_client_ready() {
-    println!("[rpc] HTTP client ready  (getMultipleAccounts, 10s timeout)");
+    println!("[rpc] HTTP client ready  (10s timeout)");
 }
 
 pub fn waiting_for_account_updates() {

@@ -199,7 +199,7 @@ Terms are grouped in the order you meet them when reading the steps.
 
 ---
 
-## Not built yet (roadmap)
+## Building and sending transactions (Step 7)
 
 **Instruction**
 - **What it is:** one call into a program, for example "swap 1 SOL on this pool".
@@ -227,3 +227,28 @@ Terms are grouped in the order you meet them when reading the steps.
 
 **Simulation**
 - **What it is:** a dry run of a transaction through RPC (`simulateTransaction`) to see if it would succeed, without sending it.
+
+**Keypair / signature**
+- **What it is:** a wallet is a secret key plus the public key derived from it. Signing the transaction bytes with the secret key produces a 64-byte signature that proves the owner approved it. The first signature is also the transaction's ID.
+- **In the code:** `TradingWallet`, loaded from `WALLET_KEYPAIR_PATH`.
+
+**Associated token account (ATA)**
+- **What it is:** the one standard token account for a (wallet, mint) pair. Its address is a PDA of `[wallet, token program, mint]`, so anyone can compute it. `CreateIdempotent` creates it only if it does not exist yet.
+
+**Wrapped SOL (wSOL) / `sync_native`**
+- **What it is:** SOL is not an SPL token, but pools only trade SPL tokens. wSOL is SOL held inside a token account. You wrap by sending lamports to that account and calling `sync_native` so the token balance catches up. You unwrap by closing the account, which returns every lamport.
+
+**`other_amount_threshold`**
+- **What it is:** the on-chain name for the minimum output of an exact-input swap. The bot sets leg 2's threshold to *start amount + all costs + minimum profit*, so a trade that would not pay reverts.
+
+**v0 transaction / address lookup table (ALT)**
+- **What it is:** a transaction may be at most 1,232 bytes, and every account costs 32 of them. A version-0 transaction can refer to accounts stored in an on-chain *lookup table* by a 1-byte index instead. Flash-loan trades touch about 35 accounts and usually need one (`ADDRESS_LOOKUP_TABLES`).
+
+**Instructions sysvar**
+- **What it is:** a special read-only account listing every instruction in the current transaction. Kamino reads it during a flash borrow to check that a matching repay comes later.
+
+**Single flight**
+- **What it is:** allowing only one trade in progress at a time, so the bot never spends the same SOL twice or races itself.
+
+**Stale state**
+- **What it is:** cached prices that may no longer match the chain. The bot refuses to trade if the Geyser stream has been silent for too long (`MAX_STREAM_SILENCE_MS`) or a pool's state is many slots behind the newest slot seen (`MAX_STATE_AGE_SLOTS`).

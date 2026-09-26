@@ -15,13 +15,19 @@
 //!   See [`geyser_grpc_client`].
 //!
 //! The bot needs both: Geyser to react instantly, RPC to fill in the state that
-//! existed before we subscribed — and, in the future, to send transactions.
+//! existed before we subscribed and to simulate and send transactions.
 //!
-//! Both endpoints come from environment variables (`.env`): `RPC_URL`,
-//! `GRPC_URL`, and `X_TOKEN` (the Geyser provider's access token).
+//! - **Jito block engine** — a third, optional link used only for *sending*:
+//!   it accepts bundles and auctions block space by tip.
+//!   See [`jito_block_engine_client`].
+//!
+//! Endpoints come from environment variables (`.env`): `RPC_URL`, `GRPC_URL`,
+//! `X_TOKEN` (the Geyser provider's access token), and `JITO_BLOCK_ENGINE_URL`.
 
 mod geyser_grpc_client;
+mod jito_block_engine_client;
 mod solana_rpc_client;
 
 pub use geyser_grpc_client::*;
+pub use jito_block_engine_client::*;
 pub use solana_rpc_client::*;

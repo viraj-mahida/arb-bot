@@ -17,14 +17,17 @@
 //! **A catch:** Geyser only sends *future* writes. A tick array that nobody
 //! touches for an hour would stay unknown for an hour. So the first time we
 //! start watching a tick array, we also fetch its current bytes once over RPC
-//! ([`load_tick_arrays_not_yet_streamed`]).
+//! ([`load_tick_arrays_not_yet_streamed`]). Raydium's fee tier is read the
+//! same way, once ([`load_raydium_fee_config`]).
 //!
-//! **What comes next:** decoding (Step 2), storing (Step 3), and printing a
-//! fresh snapshot with quotes (Steps 4–6) after every pool update.
+//! **What comes next:** decoding (Step 2), storing (Step 3), printing a fresh
+//! snapshot with quotes (Steps 4–6), and — when trading is configured —
+//! letting Step 7 decide whether to trade, after every pool update.
 
 mod account_update_loop;
 mod handle_pool_account_update;
 mod handle_tick_array_account_update;
+mod load_raydium_fee_config;
 mod load_tick_arrays_not_yet_streamed;
 
 pub use account_update_loop::process_account_updates_forever;

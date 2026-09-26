@@ -9,7 +9,7 @@ use super::read_little_endian_numbers::{
     read_u16_little_endian,
 };
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, DexProgram, InitializedTickWithLiquidityChange,
+    ConcentratedLiquidityPoolState, DexProgram, DexSpecificSwapAccounts, InitializedTickWithLiquidityChange,
     TickArrayAccountWithInitializedTicks, TickArrayPdaToWatch, WatchedPoolConfig,
 };
 
@@ -24,6 +24,7 @@ use crate::step_3_store_latest_pool_state::{
 //   105    32    token_mint_1   (token B)
 //   137    32    token_vault_0
 //   169    32    token_vault_1
+//   201    32    observation_key (price-history account, needed by swaps)
 //   233    1     mint_decimals_0
 //   234    1     mint_decimals_1
 //   235    2     tick_spacing   (u16)
@@ -31,9 +32,11 @@ use crate::step_3_store_latest_pool_state::{
 //   253    16    sqrt_price_x64 (u128, Q64.64)
 //   269    4     tick_current   (i32)
 //
-// Raydium keeps the fee in a separate `amm_config` account, so we take it from
-// `WatchedPoolConfig`. Current limitation: a production bot would decode the
-// amm_config account too, in case the fee tier ever changes.
+// Raydium keeps the fee in the separate `amm_config` account. This decoder
+// starts from the `WatchedPoolConfig` fee; Step 1 then replaces it with the
+// real `trade_fee_rate` read by [`decode_raydium_fee_config_trade_fee_rate`].
+const RAYDIUM_POOL_FEE_CONFIG_AT_BYTE: usize = 9;
+const RAYDIUM_POOL_PRICE_OBSERVATION_AT_BYTE: usize = 201;
 const RAYDIUM_POOL_TOKEN_A_MINT_AT_BYTE: usize = 73;
 const RAYDIUM_POOL_TOKEN_B_MINT_AT_BYTE: usize = 105;
 const RAYDIUM_POOL_TOKEN_A_VAULT_AT_BYTE: usize = 137;
@@ -68,9 +71,33 @@ pub fn decode_raydium_pool_account(
         sqrt_price_q64_64: read_u128_little_endian(account_data, RAYDIUM_POOL_SQRT_PRICE_AT_BYTE)?,
         current_tick_index: read_i32_little_endian(account_data, RAYDIUM_POOL_CURRENT_TICK_AT_BYTE)?,
         fee_rate_in_millionths: pool_config.fee_rate_in_millionths(),
+        dex_specific_swap_accounts: DexSpecificSwapAccounts::RaydiumClmm {
+            fee_config_address: read_public_key(account_data, RAYDIUM_POOL_FEE_CONFIG_AT_BYTE)?,
+            price_observation_address: read_public_key(account_data, RAYDIUM_POOL_PRICE_OBSERVATION_AT_BYTE)?,
+        },
         slot,
         geyser_write_version_for_ordering: geyser_write_version,
     })
+}
+
+// ── AmmConfig (fee tier) account ──────────────────────────────────────────
+//
+//   byte   size  field
+//   0      8     Anchor discriminator
+//   8      1     bump
+//   9      2     index
+//   11     32    owner
+//   43     4     protocol_fee_rate (u32)
+//   47     4     trade_fee_rate    (u32, millionths — the swap fee)
+const RAYDIUM_FEE_CONFIG_TRADE_FEE_RATE_AT_BYTE: usize = 47;
+
+/// The swap fee (millionths of the input) stored in a Raydium `amm_config` account.
+///
+/// Returns `None` if the bytes are too short or the fee does not fit the
+/// shared `u16` field (a fee above 6.5% would be a sign of a wrong account).
+pub fn decode_raydium_fee_config_trade_fee_rate(account_data: &[u8]) -> Option<u16> {
+    let bytes = account_data.get(RAYDIUM_FEE_CONFIG_TRADE_FEE_RATE_AT_BYTE..RAYDIUM_FEE_CONFIG_TRADE_FEE_RATE_AT_BYTE + 4)?;
+    u16::try_from(u32::from_le_bytes(bytes.try_into().ok()?)).ok()
 }
 
 // ── TickArrayState account ────────────────────────────────────────────────

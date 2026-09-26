@@ -9,7 +9,7 @@ use super::read_little_endian_numbers::{
     read_u16_little_endian,
 };
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, DexProgram, InitializedTickWithLiquidityChange,
+    ConcentratedLiquidityPoolState, DexProgram, DexSpecificSwapAccounts, InitializedTickWithLiquidityChange,
     TickArrayAccountWithInitializedTicks, TickArrayPdaToWatch, WatchedPoolConfig,
 };
 
@@ -64,6 +64,7 @@ pub fn decode_orca_pool_account(
         token_b_vault: read_public_key(account_data, ORCA_POOL_TOKEN_B_VAULT_AT_BYTE)?,
         token_a_decimals: pool_config.token_a_decimals,
         token_b_decimals: pool_config.token_b_decimals,
+        dex_specific_swap_accounts: DexSpecificSwapAccounts::OrcaWhirlpool,
         slot,
         geyser_write_version_for_ordering: geyser_write_version,
     })

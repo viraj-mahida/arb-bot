@@ -68,7 +68,6 @@ impl DexProgram {
 /// "Token A" and "token B" are the DEX's own names for the two sides of the
 /// pool. In today's SOL/USDC pools, token A = SOL and token B = USDC.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // mints and vaults are needed later to build swap instructions
 pub struct ConcentratedLiquidityPoolState {
     /// The pool account's own address (its public key).
     pub pool_address: PublicKeyBytes,
@@ -140,6 +139,9 @@ pub struct ConcentratedLiquidityPoolState {
     /// How many decimal places token B uses (USDC = 6, so 1 USDC = 1,000,000 micro-USDC).
     pub token_b_decimals: u8,
 
+    /// Extra accounts only one DEX needs when building a swap instruction (Step 7).
+    pub dex_specific_swap_accounts: DexSpecificSwapAccounts,
+
     /// Slot (Solana's block-height clock, ~400ms per slot) when this state was seen.
     pub slot: u64,
     /// Geyser's counter for account writes. Higher = newer.
@@ -148,6 +150,24 @@ pub struct ConcentratedLiquidityPoolState {
     /// slot, and messages can arrive out of order. The cache uses this number
     /// to throw away an older write that arrives after a newer one.
     pub geyser_write_version_for_ordering: u64,
+}
+
+/// Accounts a swap instruction needs that are not shared by every DEX.
+///
+/// **Why an enum:** the shared fields above are enough to *quote* a swap, but
+/// each DEX's swap instruction also asks for a few accounts of its own. Keeping
+/// them here means Step 7 never has to re-read the raw pool bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DexSpecificSwapAccounts {
+    /// Orca derives everything else (oracle, tick arrays) from the pool address.
+    OrcaWhirlpool,
+    RaydiumClmm {
+        /// The `amm_config` account: holds the fee tier shared by many pools.
+        fee_config_address: PublicKeyBytes,
+        /// The `observation_key` account: a price-history ring buffer the
+        /// program updates on every swap (used for time-weighted prices).
+        price_observation_address: PublicKeyBytes,
+    },
 }
 
 impl ConcentratedLiquidityPoolState {

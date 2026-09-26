@@ -2,7 +2,7 @@
 
 use crate::step_3_store_latest_pool_state::tick_array_pda_derivation::tick_array_start_index_containing_tick;
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, DexProgram, TickArrayAccountWithInitializedTicks,
+    ConcentratedLiquidityPoolState, DexProgram, DexSpecificSwapAccounts, TickArrayAccountWithInitializedTicks,
 };
 
 /// Very deep liquidity, so a 0.1 SOL trade barely moves the price.
@@ -51,6 +51,13 @@ pub fn test_pool_at_tick_with_one_empty_tick_array(
         token_b_vault: [0u8; 32],
         token_a_decimals: 9,
         token_b_decimals: 6,
+        dex_specific_swap_accounts: match dex {
+            DexProgram::OrcaWhirlpool => DexSpecificSwapAccounts::OrcaWhirlpool,
+            DexProgram::RaydiumClmm => DexSpecificSwapAccounts::RaydiumClmm {
+                fee_config_address: [3u8; 32],
+                price_observation_address: [4u8; 32],
+            },
+        },
         slot: 1,
         geyser_write_version_for_ordering: 1,
     };

@@ -1,6 +1,7 @@
 //! The main loop: read the next Geyser message and hand it to the right handler.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use futures::StreamExt;
 use yellowstone_grpc_proto::geyser::subscribe_update::UpdateOneof;
@@ -8,6 +9,7 @@ use yellowstone_grpc_proto::geyser::subscribe_update::UpdateOneof;
 use crate::solana_connections::{GeyserAccountUpdateStream, GeyserSubscriptionSender, SolanaRpcClient};
 use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, WatchedPools, public_key_from_byte_slice};
 use crate::step_6_print_logs;
+use crate::step_7_build_and_send_transactions::ArbitrageTradeExecutor;
 
 /// Everything the handlers need while processing updates.
 pub(super) struct AccountUpdateListener<'a> {
@@ -18,6 +20,8 @@ pub(super) struct AccountUpdateListener<'a> {
     pub(super) all_subscribed_addresses_base58: HashSet<String>,
     pub(super) cache: &'a LatestPoolStateCache,
     pub(super) rpc_client: &'a SolanaRpcClient,
+    /// `None` when trading is not configured (watch-only).
+    pub(super) trade_executor: Option<Arc<ArbitrageTradeExecutor>>,
 }
 
 /// Process Geyser account updates until the stream ends.
@@ -27,12 +31,14 @@ pub async fn process_account_updates_forever(
     watched_pools: &WatchedPools,
     cache: &LatestPoolStateCache,
     rpc_client: &SolanaRpcClient,
+    trade_executor: Option<Arc<ArbitrageTradeExecutor>>,
 ) {
     let mut listener = AccountUpdateListener {
         geyser_subscription_sender,
         all_subscribed_addresses_base58: watched_pools.pool_addresses_to_subscribe().into_iter().collect(),
         cache,
         rpc_client,
+        trade_executor,
     };
     step_6_print_logs::waiting_for_account_updates();
 
@@ -54,6 +60,7 @@ pub async fn process_account_updates_forever(
         let Some(account_address) = public_key_from_byte_slice(&account.pubkey) else {
             continue;
         };
+        cache.record_stream_update(account_update.slot);
 
         if let Some(pool_config) = watched_pools.config_for_pool_address(&account_address) {
             listener
