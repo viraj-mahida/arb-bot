@@ -1,6 +1,8 @@
 //! Result types of quoting: one swap, a two-pool round trip, and why a quote can fail.
 
-use crate::step_3_store_latest_pool_state::DexProgram;
+use crate::step_3_store_latest_pool_state::{
+    ConcentratedLiquidityPoolState, encode_public_key_as_base58,
+};
 
 /// Small trade size used in unit tests: 0.1 SOL in lamports.
 #[cfg(test)]
@@ -55,10 +57,6 @@ pub struct SwapQuoteForExactInput {
 /// list of legs.
 #[derive(Debug, Clone, Copy)]
 pub struct TwoPoolArbitrageRoundTrip {
-    /// DEX where we sell the start token (the pool that pays more for it).
-    pub sell_pool_dex: DexProgram,
-    /// DEX where we buy the start token back (the pool that charges less for it).
-    pub buy_pool_dex: DexProgram,
     /// Start token sent into leg 1.
     pub start_token_amount_in: u64,
     /// Bridge token received from leg 1 and spent in leg 2.
@@ -71,19 +69,26 @@ pub struct TwoPoolArbitrageRoundTrip {
 
 /// One attempted sell→buy round trip, including the direction when quoting failed.
 ///
-/// The DEX names are stored separately from [`TwoPoolArbitrageRoundTrip`] so a
-/// skipped quote can still be labeled `raydium_clmm→orca_whirlpool`.
+/// The labels are stored separately from [`TwoPoolArbitrageRoundTrip`] so a
+/// skipped quote can still be labeled `raydium_clmm:3ucN→orca_whirlpool:Czfq`.
 #[derive(Debug)]
 pub struct DirectedRoundTripQuote {
-    pub sell_pool_dex: DexProgram,
-    pub buy_pool_dex: DexProgram,
+    pub sell_pool_label: String,
+    pub buy_pool_label: String,
     pub result: Result<TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed>,
 }
 
 impl DirectedRoundTripQuote {
     pub fn direction_label(&self) -> String {
-        format!("{}→{}", self.sell_pool_dex.name(), self.buy_pool_dex.name())
+        format!("{}→{}", self.sell_pool_label, self.buy_pool_label)
     }
+}
+
+/// `dex:first-4-chars-of-address`. The DEX name alone is ambiguous once
+/// several pools on one DEX are watched.
+pub fn pool_label(pool: &ConcentratedLiquidityPoolState) -> String {
+    let address = encode_public_key_as_base58(&pool.pool_address);
+    format!("{}:{}", pool.dex.name(), &address[..4.min(address.len())])
 }
 
 impl TwoPoolArbitrageRoundTrip {

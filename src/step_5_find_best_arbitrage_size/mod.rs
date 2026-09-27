@@ -61,7 +61,7 @@ use functions::{
 };
 pub use most_profitable_round_trip::main_quote_most_profitable_two_pool_round_trip;
 pub use watched_pair_round_trips::{
-    WatchedPairRoundTripQuotes, main_quote_watched_orca_and_raydium_pair,
+    RoundTripQuotesTouchingPool, main_quote_round_trips_touching_pool,
 };
 
 /// Safety cap on walk steps, so malformed tick data can never loop forever.

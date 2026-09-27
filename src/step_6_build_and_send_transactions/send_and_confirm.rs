@@ -63,8 +63,10 @@ pub async fn main_simulate_then_send_if_allowed(
     } else {
         // Read concurrently so the balance lookup never delays the send; the
         // transaction cannot land before this read is served.
-        let (balance_before, accepted) =
-            tokio::join!(clients.rpc.get_balance(wallet), submit(clients, transaction));
+        let (balance_before, accepted) = tokio::join!(
+            clients.rpc.get_balance(wallet),
+            submit(clients, transaction)
+        );
         if !accepted {
             return;
         }

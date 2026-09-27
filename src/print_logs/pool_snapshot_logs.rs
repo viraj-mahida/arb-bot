@@ -1,32 +1,46 @@
-//! One line after every pool update: both prices, the gap, and whether it beats the fees.
+//! After every pool update: the updated pool's price against each pool with the same mints.
 
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, DexProgram, LatestPoolStateCache,
+    ConcentratedLiquidityPoolState, LatestPoolStateCache, PublicKeyBytes,
 };
+use crate::step_4_quote_swaps::pool_label;
 
-pub fn pool_snapshot(cache: &LatestPoolStateCache) {
-    let raydium_pool = cache.first_pool_on_dex(DexProgram::RaydiumClmm);
-    let orca_pool = cache.first_pool_on_dex(DexProgram::OrcaWhirlpool);
-    let (Some(raydium_pool), Some(orca_pool)) = (raydium_pool, orca_pool) else {
-        log_line!("[spread]  waiting until both pools have sent their first update");
+pub fn pool_snapshot(cache: &LatestPoolStateCache, updated_pool_address: &PublicKeyBytes) {
+    let Some(updated_pool) = cache.pool_state_by_address(updated_pool_address) else {
         return;
     };
+    let other_pools = cache.other_pools_with_same_mint_pair(updated_pool_address);
+    if other_pools.is_empty() {
+        log_line!(
+            "[spread]  {}  waiting for another pool with the same mints",
+            pool_label(&updated_pool)
+        );
+        return;
+    }
+    for other_pool in &other_pools {
+        print_spread(&updated_pool, other_pool);
+    }
+}
 
-    let raydium_price = raydium_pool.human_readable_price_token_b_per_token_a();
-    let orca_price = orca_pool.human_readable_price_token_b_per_token_a();
-    let midpoint_price = (raydium_price + orca_price) / 2.0;
+fn print_spread(
+    pool: &ConcentratedLiquidityPoolState,
+    other_pool: &ConcentratedLiquidityPoolState,
+) {
+    let price = pool.human_readable_price_token_b_per_token_a();
+    let other_price = other_pool.human_readable_price_token_b_per_token_a();
+    let midpoint_price = (price + other_price) / 2.0;
     // 1 basis point (bp) = 0.01%, the usual unit for small price differences.
     let gap_in_basis_points = if midpoint_price > 0.0 {
-        (raydium_price - orca_price).abs() / midpoint_price * 10_000.0
+        (price - other_price).abs() / midpoint_price * 10_000.0
     } else {
         0.0
     };
-    let higher_dex = if raydium_price >= orca_price {
-        DexProgram::RaydiumClmm
+    let higher_pool = if price >= other_price {
+        pool
     } else {
-        DexProgram::OrcaWhirlpool
+        other_pool
     };
-    let fees_in_basis_points = fee_in_basis_points(&raydium_pool) + fee_in_basis_points(&orca_pool);
+    let fees_in_basis_points = fee_in_basis_points(pool) + fee_in_basis_points(other_pool);
     let verdict = if gap_in_basis_points > fees_in_basis_points {
         "gap beats fees → checking best size"
     } else {
@@ -34,8 +48,10 @@ pub fn pool_snapshot(cache: &LatestPoolStateCache) {
     };
 
     log_line!(
-        "[spread]  raydium {raydium_price:.4}  orca {orca_price:.4} USDC/SOL  gap {gap_in_basis_points:.2} bps ({} higher)  fees {fees_in_basis_points:.2} bps  {verdict}",
-        higher_dex.name(),
+        "[spread]  {} {price:.4}  {} {other_price:.4}  gap {gap_in_basis_points:.2} bps ({} higher)  fees {fees_in_basis_points:.2} bps  {verdict}",
+        pool_label(pool),
+        pool_label(other_pool),
+        pool_label(higher_pool),
     );
 }
 

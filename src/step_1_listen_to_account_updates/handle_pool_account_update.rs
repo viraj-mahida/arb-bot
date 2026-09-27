@@ -10,7 +10,7 @@ use crate::step_2_decode_account_bytes::main_decode_pool_account;
 use crate::step_3_store_latest_pool_state::{
     WatchedPoolConfig, encode_public_key_as_base58, tick_array_pdas_near_current_price,
 };
-use crate::step_5_find_best_arbitrage_size::main_quote_watched_orca_and_raydium_pair;
+use crate::step_5_find_best_arbitrage_size::main_quote_round_trips_touching_pool;
 
 impl AccountUpdateListener<'_> {
     /// 1. Decode the pool bytes and save them.
@@ -81,12 +81,13 @@ impl AccountUpdateListener<'_> {
             .await;
         }
 
-        print_logs::pool_snapshot(self.cache);
-        if let Some(quotes) = main_quote_watched_orca_and_raydium_pair(self.cache) {
-            print_logs::print_arbitrage_quotes(&quotes);
-        }
+        print_logs::pool_snapshot(self.cache, &pool_state.pool_address);
+        print_logs::print_arbitrage_quotes(&main_quote_round_trips_touching_pool(
+            self.cache,
+            &pool_state.pool_address,
+        ));
         if let Some(trade_executor) = &self.trade_executor {
-            trade_executor.main_consider_trading(self.cache);
+            trade_executor.main_consider_trading(self.cache, &pool_state.pool_address);
         }
     }
 }

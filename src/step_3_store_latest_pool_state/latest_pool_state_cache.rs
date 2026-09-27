@@ -14,8 +14,7 @@ use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Instant;
 
 use super::shared_pool_types::{
-    ConcentratedLiquidityPoolState, DexProgram, TickArrayAccountWithInitializedTicks,
-    TickArrayPdaToWatch,
+    ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks, TickArrayPdaToWatch,
 };
 use super::solana_public_key_helpers::PublicKeyBytes;
 
@@ -24,6 +23,14 @@ use super::solana_public_key_helpers::PublicKeyBytes;
 pub struct LatestPoolStateCache {
     /// Newest decoded state of each watched pool.
     pool_state_by_pool_address: RwLock<HashMap<PublicKeyBytes, ConcentratedLiquidityPoolState>>,
+    /// Pools grouped by `(token_a_mint, token_b_mint)`. Only pools in the same
+    /// group can form a two-pool round trip; the DEX does not matter.
+    ///
+    /// Keyed in each pool's own A/B order: the quoting math assumes both legs
+    /// agree on which mint is token A, so a SOL/USDC pool and a USDC/SOL pool
+    /// land in different groups.
+    pool_addresses_by_mint_pair:
+        RwLock<HashMap<(PublicKeyBytes, PublicKeyBytes), Vec<PublicKeyBytes>>>,
     /// Tick-array addresses we decided to watch, and what each one belongs to.
     /// Filled *before* their data arrives, so incoming bytes can be identified.
     watched_tick_array_by_address: RwLock<HashMap<PublicKeyBytes, TickArrayPdaToWatch>>,
@@ -56,30 +63,46 @@ impl LatestPoolStateCache {
         {
             return;
         }
-        pools.insert(pool_state.pool_address, pool_state);
+        let mint_pair = (pool_state.token_a_mint, pool_state.token_b_mint);
+        let pool_address = pool_state.pool_address;
+        let is_first_sighting = pools.insert(pool_address, pool_state).is_none();
+        drop(pools);
+        if is_first_sighting {
+            write_lock(&self.pool_addresses_by_mint_pair)
+                .entry(mint_pair)
+                .or_default()
+                .push(pool_address);
+        }
     }
 
-    /// Look a pool up by its address. This is the lookup multi-pool code should use.
-    #[allow(dead_code)] // used later when building swap instructions for a specific pool
+    /// Every other cached pool that trades the same token A / token B as `pool_address`.
+    ///
+    /// These are the only pools whose round trips with `pool_address` can
+    /// change when `pool_address` updates.
+    pub fn other_pools_with_same_mint_pair(
+        &self,
+        pool_address: &PublicKeyBytes,
+    ) -> Vec<ConcentratedLiquidityPoolState> {
+        let pools = read_lock(&self.pool_state_by_pool_address);
+        let Some(pool) = pools.get(pool_address) else {
+            return Vec::new();
+        };
+        read_lock(&self.pool_addresses_by_mint_pair)
+            .get(&(pool.token_a_mint, pool.token_b_mint))
+            .into_iter()
+            .flatten()
+            .filter(|address| *address != pool_address)
+            .filter_map(|address| pools.get(address).cloned())
+            .collect()
+    }
+
+    /// Look a pool up by its address.
     pub fn pool_state_by_address(
         &self,
         pool_address: &PublicKeyBytes,
     ) -> Option<ConcentratedLiquidityPoolState> {
         read_lock(&self.pool_state_by_pool_address)
             .get(pool_address)
-            .cloned()
-    }
-
-    /// Any one pool owned by `dex`.
-    ///
-    /// TODO? Current limitation: we watch exactly one pool per DEX, so "the first one"
-    /// is "the only one". With several pools per DEX the result would be
-    /// arbitrary (hash-map order), and callers must switch to
-    /// [`Self::pool_state_by_address`].
-    pub fn first_pool_on_dex(&self, dex: DexProgram) -> Option<ConcentratedLiquidityPoolState> {
-        read_lock(&self.pool_state_by_pool_address)
-            .values()
-            .find(|pool| pool.dex == dex)
             .cloned()
     }
 

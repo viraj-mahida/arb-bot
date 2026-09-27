@@ -13,10 +13,10 @@
 use super::quote_swap_exact_input::main_quote_swap_exact_input;
 use super::swap_quote_types::{
     DirectedRoundTripQuote, SwapDirection, TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed,
+    pool_label,
 };
 use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, DexProgram, LatestPoolStateCache,
-    TickArrayAccountWithInitializedTicks,
+    ConcentratedLiquidityPoolState, LatestPoolStateCache, TickArrayAccountWithInitializedTicks,
 };
 
 /// Quote selling `start_token_amount_in` of token A on `sell_pool`, then
@@ -41,8 +41,6 @@ pub fn main_quote_two_pool_round_trip(
         SwapDirection::TokenBToTokenA,
     )?;
     Ok(TwoPoolArbitrageRoundTrip {
-        sell_pool_dex: sell_pool.dex,
-        buy_pool_dex: buy_pool.dex,
         start_token_amount_in,
         bridge_token_amount_between_legs: sell_leg.output_amount,
         start_token_amount_out: buy_leg.output_amount,
@@ -51,59 +49,41 @@ pub fn main_quote_two_pool_round_trip(
     })
 }
 
-/// The two SOL/USDC pools this bot watches, plus the tick arrays cached for each.
-///
-/// `None` until both DEXes have appeared in the cache.
-pub(crate) struct CachedOrcaAndRaydiumPools {
-    pub raydium_pool: ConcentratedLiquidityPoolState,
-    pub raydium_tick_arrays: Vec<TickArrayAccountWithInitializedTicks>,
-    pub orca_pool: ConcentratedLiquidityPoolState,
-    pub orca_tick_arrays: Vec<TickArrayAccountWithInitializedTicks>,
+/// One cached pool plus the tick arrays cached for it.
+pub(crate) struct CachedPoolWithTickArrays {
+    pub pool: ConcentratedLiquidityPoolState,
+    pub tick_arrays: Vec<TickArrayAccountWithInitializedTicks>,
 }
 
-impl CachedOrcaAndRaydiumPools {
-    pub(crate) fn from_cache(cache: &LatestPoolStateCache) -> Option<Self> {
-        let raydium_pool = cache.first_pool_on_dex(DexProgram::RaydiumClmm)?;
-        let orca_pool = cache.first_pool_on_dex(DexProgram::OrcaWhirlpool)?;
-        Some(Self {
-            raydium_tick_arrays: cache.tick_arrays_for_pool(&raydium_pool.pool_address),
-            orca_tick_arrays: cache.tick_arrays_for_pool(&orca_pool.pool_address),
-            raydium_pool,
-            orca_pool,
-        })
+impl CachedPoolWithTickArrays {
+    pub(crate) fn from_cache(
+        cache: &LatestPoolStateCache,
+        pool: ConcentratedLiquidityPoolState,
+    ) -> Self {
+        Self {
+            tick_arrays: cache.tick_arrays_for_pool(&pool.pool_address),
+            pool,
+        }
     }
+}
 
-    /// Quote raydium→orca and orca→raydium. At most one direction can be profitable.
-    pub(crate) fn quote_both_directions(
-        &self,
-        mut quote: impl FnMut(
-            &ConcentratedLiquidityPoolState,
-            &[TickArrayAccountWithInitializedTicks],
-            &ConcentratedLiquidityPoolState,
-            &[TickArrayAccountWithInitializedTicks],
-        ) -> Result<TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed>,
-    ) -> [DirectedRoundTripQuote; 2] {
-        [
-            DirectedRoundTripQuote {
-                sell_pool_dex: self.raydium_pool.dex,
-                buy_pool_dex: self.orca_pool.dex,
-                result: quote(
-                    &self.raydium_pool,
-                    &self.raydium_tick_arrays,
-                    &self.orca_pool,
-                    &self.orca_tick_arrays,
-                ),
-            },
-            DirectedRoundTripQuote {
-                sell_pool_dex: self.orca_pool.dex,
-                buy_pool_dex: self.raydium_pool.dex,
-                result: quote(
-                    &self.orca_pool,
-                    &self.orca_tick_arrays,
-                    &self.raydium_pool,
-                    &self.raydium_tick_arrays,
-                ),
-            },
-        ]
-    }
+/// Quote `updated_pool` against `other_pool` in both sell→buy directions.
+/// At most one direction can be profitable.
+pub(crate) fn quote_both_directions(
+    updated_pool: &CachedPoolWithTickArrays,
+    other_pool: &CachedPoolWithTickArrays,
+    mut quote: impl FnMut(
+        &ConcentratedLiquidityPoolState,
+        &[TickArrayAccountWithInitializedTicks],
+        &ConcentratedLiquidityPoolState,
+        &[TickArrayAccountWithInitializedTicks],
+    ) -> Result<TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed>,
+) -> [DirectedRoundTripQuote; 2] {
+    [(updated_pool, other_pool), (other_pool, updated_pool)].map(|(sell, buy)| {
+        DirectedRoundTripQuote {
+            sell_pool_label: pool_label(&sell.pool),
+            buy_pool_label: pool_label(&buy.pool),
+            result: quote(&sell.pool, &sell.tick_arrays, &buy.pool, &buy.tick_arrays),
+        }
+    })
 }

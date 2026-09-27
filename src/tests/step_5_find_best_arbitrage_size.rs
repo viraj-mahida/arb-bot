@@ -8,7 +8,7 @@ use crate::step_3_store_latest_pool_state::{
 use crate::step_4_quote_swaps::{PROBE_TRADE_INPUT_AMOUNT, WhySwapQuoteFailed};
 use crate::step_5_find_best_arbitrage_size::{
     main_find_input_amount_that_maximizes_profit, main_quote_most_profitable_two_pool_round_trip,
-    main_quote_watched_orca_and_raydium_pair,
+    main_quote_round_trips_touching_pool,
 };
 
 /// Same pool on both sides means no price gap at all, so the best size is zero.
@@ -126,9 +126,38 @@ fn trade_sizing_fails_when_current_tick_array_is_missing() {
     ));
 }
 
-/// The watched-pair helper is the cache-facing API; it must not guess with one pool.
+/// With one pool in the cache there is nothing to pair it with.
 #[test]
-fn watched_pair_quotes_need_both_dexes_in_the_cache() {
+fn no_round_trips_until_a_second_pool_with_the_same_mints_arrives() {
     let cache = LatestPoolStateCache::new();
-    assert!(main_quote_watched_orca_and_raydium_pair(&cache).is_none());
+    let (pool, _) = test_pool_with_one_empty_tick_array(DexProgram::RaydiumClmm, DEEP_LIQUIDITY);
+    let pool_address = pool.pool_address;
+    cache.save_pool_state(pool);
+    assert!(
+        main_quote_round_trips_touching_pool(&cache, &pool_address)
+            .best_size_round_trips
+            .is_empty()
+    );
+}
+
+/// An update re-quotes the updated pool against every same-mint pool (two
+/// directions each), skips pairs it is not part of, and ignores other mints.
+#[test]
+fn update_quotes_only_pairs_that_include_the_updated_pool() {
+    let cache = LatestPoolStateCache::new();
+    let pool_on_dex = |dex, address_byte: u8| {
+        let (mut pool, _) = test_pool_with_one_empty_tick_array(dex, DEEP_LIQUIDITY);
+        pool.pool_address = [address_byte; 32];
+        pool
+    };
+    let updated = pool_on_dex(DexProgram::RaydiumClmm, 1);
+    cache.save_pool_state(updated.clone());
+    cache.save_pool_state(pool_on_dex(DexProgram::RaydiumClmm, 2));
+    cache.save_pool_state(pool_on_dex(DexProgram::OrcaWhirlpool, 3));
+    let mut other_mints = pool_on_dex(DexProgram::OrcaWhirlpool, 4);
+    other_mints.token_b_mint = [9; 32];
+    cache.save_pool_state(other_mints);
+
+    let quotes = main_quote_round_trips_touching_pool(&cache, &updated.pool_address);
+    assert_eq!(quotes.best_size_round_trips.len(), 4);
 }

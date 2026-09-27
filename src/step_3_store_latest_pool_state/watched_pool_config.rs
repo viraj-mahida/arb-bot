@@ -12,7 +12,9 @@
 use std::collections::HashMap;
 
 use super::known_program_and_pool_addresses::{
-    ORCA_WHIRLPOOL_SOL_USDC_POOL_ADDRESS, RAYDIUM_CLMM_SOL_USDC_POOL_ADDRESS, SOL_DECIMALS,
+    ORCA_WHIRLPOOL_SOL_USDC_1_BP_POOL_ADDRESS, ORCA_WHIRLPOOL_SOL_USDC_2_BP_POOL_ADDRESS,
+    ORCA_WHIRLPOOL_SOL_USDC_POOL_ADDRESS, RAYDIUM_CLMM_SOL_USDC_1_BP_POOL_ADDRESS,
+    RAYDIUM_CLMM_SOL_USDC_2_BP_POOL_ADDRESS, RAYDIUM_CLMM_SOL_USDC_POOL_ADDRESS, SOL_DECIMALS,
     SOL_USDC_POOL_FEE_IN_BASIS_POINTS, USDC_DECIMALS,
 };
 use super::shared_pool_types::DexProgram;
@@ -74,8 +76,8 @@ pub struct WatchedPools {
 }
 
 impl WatchedPools {
-    /// Today's setup: one SOL/USDC pool on Raydium CLMM and one on Orca Whirlpool.
-    pub fn sol_usdc_pools_on_orca_and_raydium() -> Self {
+    /// Today's setup: SOL/USDC pools on Raydium CLMM and Orca Whirlpool, several fee tiers.
+    pub fn sol_usdc_pools() -> Self {
         Self::from_configs(vec![
             WatchedPoolConfig::new(
                 RAYDIUM_CLMM_SOL_USDC_POOL_ADDRESS,
@@ -90,6 +92,34 @@ impl WatchedPools {
                 SOL_DECIMALS,
                 USDC_DECIMALS,
                 SOL_USDC_POOL_FEE_IN_BASIS_POINTS,
+            ),
+            WatchedPoolConfig::new(
+                RAYDIUM_CLMM_SOL_USDC_1_BP_POOL_ADDRESS,
+                DexProgram::RaydiumClmm,
+                SOL_DECIMALS,
+                USDC_DECIMALS,
+                1,
+            ),
+            WatchedPoolConfig::new(
+                RAYDIUM_CLMM_SOL_USDC_2_BP_POOL_ADDRESS,
+                DexProgram::RaydiumClmm,
+                SOL_DECIMALS,
+                USDC_DECIMALS,
+                2,
+            ),
+            WatchedPoolConfig::new(
+                ORCA_WHIRLPOOL_SOL_USDC_1_BP_POOL_ADDRESS,
+                DexProgram::OrcaWhirlpool,
+                SOL_DECIMALS,
+                USDC_DECIMALS,
+                1,
+            ),
+            WatchedPoolConfig::new(
+                ORCA_WHIRLPOOL_SOL_USDC_2_BP_POOL_ADDRESS,
+                DexProgram::OrcaWhirlpool,
+                SOL_DECIMALS,
+                USDC_DECIMALS,
+                2,
             ),
         ])
     }

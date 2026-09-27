@@ -5,12 +5,12 @@
 use crate::step_4_quote_swaps::{
     DirectedRoundTripQuote, TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed,
 };
-use crate::step_5_find_best_arbitrage_size::WatchedPairRoundTripQuotes;
+use crate::step_5_find_best_arbitrage_size::RoundTripQuotesTouchingPool;
 
 const LAMPORTS_PER_SOL: f64 = 1e9;
 const MICRO_USDC_PER_USDC: f64 = 1e6;
 
-pub fn print_arbitrage_quotes(quotes: &WatchedPairRoundTripQuotes) {
+pub fn print_arbitrage_quotes(quotes: &RoundTripQuotesTouchingPool) {
     for quote in &quotes.best_size_round_trips {
         print_round_trip("best size", quote);
     }
@@ -18,19 +18,18 @@ pub fn print_arbitrage_quotes(quotes: &WatchedPairRoundTripQuotes) {
 
 fn print_round_trip(tag: &str, quote: &DirectedRoundTripQuote) {
     match &quote.result {
-        Ok(round_trip) => print_successful_round_trip(tag, round_trip),
+        Ok(round_trip) => print_successful_round_trip(tag, &quote.direction_label(), round_trip),
         // Already stated by the `[spread]` line; repeating it twice per update is noise.
         Err(WhySwapQuoteFailed::NoProfitablePriceGapAfterFees) => {}
         Err(reason) => log_line!("[{tag}]  {}  skipped: {reason}", quote.direction_label()),
     }
 }
 
-fn print_successful_round_trip(tag: &str, round_trip: &TwoPoolArbitrageRoundTrip) {
-    let direction_label = format!(
-        "{}→{}",
-        round_trip.sell_pool_dex.name(),
-        round_trip.buy_pool_dex.name()
-    );
+fn print_successful_round_trip(
+    tag: &str,
+    direction_label: &str,
+    round_trip: &TwoPoolArbitrageRoundTrip,
+) {
     let profit_in_sol = round_trip.profit_in_start_token() as f64 / LAMPORTS_PER_SOL;
     let partial_fill_note = if round_trip.both_swaps_fully_filled {
         ""

@@ -90,7 +90,7 @@ async fn main() {
     dotenvy::dotenv().ok();
     print_logs::start_copying_to_file();
 
-    let watched_pools = WatchedPools::sol_usdc_pools_on_orca_and_raydium();
+    let watched_pools = WatchedPools::sol_usdc_pools();
     print_logs::startup_banner(&watched_pools);
     let cache = LatestPoolStateCache::new();
     let rpc_client = SolanaRpcClient::from_env();

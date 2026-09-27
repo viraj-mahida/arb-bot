@@ -31,7 +31,8 @@ use super::trading_wallet::TradingWallet;
 use crate::bot_settings::{BotSettingsFromEnvironment, FundingMode};
 use crate::print_logs;
 use crate::solana_connections::{JitoBlockEngineClient, SolanaRpcClient};
-use crate::step_3_store_latest_pool_state::{DexProgram, LatestPoolStateCache, PublicKeyBytes};
+use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, PublicKeyBytes};
+use crate::step_4_quote_swaps::{CachedPoolWithTickArrays, pool_label};
 
 pub struct ArbitrageTradeExecutor {
     settings: BotSettingsFromEnvironment,
@@ -110,54 +111,52 @@ impl ArbitrageTradeExecutor {
         })))
     }
 
-    /// Called after every pool update: check both directions and, if one is
-    /// approved and no trade is running, start it in the background.
-    pub fn main_consider_trading(self: &Arc<Self>, cache: &LatestPoolStateCache) {
-        let (Some(raydium_pool), Some(orca_pool)) = (
-            cache.first_pool_on_dex(DexProgram::RaydiumClmm),
-            cache.first_pool_on_dex(DexProgram::OrcaWhirlpool),
-        ) else {
+    /// Called after every pool update: check both directions against every
+    /// pool sharing the updated pool's mint pair, and start the most profitable
+    /// approved trade in the background if no trade is running.
+    pub fn main_consider_trading(
+        self: &Arc<Self>,
+        cache: &LatestPoolStateCache,
+        updated_pool_address: &PublicKeyBytes,
+    ) {
+        let Some(updated_pool) = cache.pool_state_by_address(updated_pool_address) else {
             return;
         };
-        let raydium_tick_arrays = cache.tick_arrays_for_pool(&raydium_pool.pool_address);
-        let orca_tick_arrays = cache.tick_arrays_for_pool(&orca_pool.pool_address);
+        let updated_pool = CachedPoolWithTickArrays::from_cache(cache, updated_pool);
         let freshness = CacheFreshness {
             newest_slot_seen_from_stream: cache.newest_slot_seen_from_stream(),
             milliseconds_since_last_stream_update: cache.milliseconds_since_last_stream_update(),
         };
 
-        let directions = [
-            (
-                &raydium_pool,
-                &raydium_tick_arrays,
-                &orca_pool,
-                &orca_tick_arrays,
-            ),
-            (
-                &orca_pool,
-                &orca_tick_arrays,
-                &raydium_pool,
-                &raydium_tick_arrays,
-            ),
-        ];
-        for (sell_pool, sell_tick_arrays, buy_pool, buy_tick_arrays) in directions {
-            let direction_label = format!("{}→{}", sell_pool.dex.name(), buy_pool.dex.name());
-            match main_decide_if_trade_is_worth_it(
-                sell_pool,
-                sell_tick_arrays,
-                buy_pool,
-                buy_tick_arrays,
-                freshness,
-                &self.rules,
-            ) {
-                Ok(trade) => {
-                    print_logs::trade_approved(&trade);
-                    self.start_trade_unless_one_is_running(trade);
-                    // Both directions cannot be profitable at once.
-                    return;
+        let mut best_trade: Option<ApprovedArbitrageTrade> = None;
+        for other_pool in cache.other_pools_with_same_mint_pair(updated_pool_address) {
+            let other_pool = CachedPoolWithTickArrays::from_cache(cache, other_pool);
+            for (sell, buy) in [(&updated_pool, &other_pool), (&other_pool, &updated_pool)] {
+                let direction_label =
+                    format!("{}→{}", pool_label(&sell.pool), pool_label(&buy.pool));
+                match main_decide_if_trade_is_worth_it(
+                    &sell.pool,
+                    &sell.tick_arrays,
+                    &buy.pool,
+                    &buy.tick_arrays,
+                    freshness,
+                    &self.rules,
+                ) {
+                    Ok(trade) => {
+                        print_logs::trade_approved(&trade);
+                        let beats_best = best_trade.as_ref().is_none_or(|best| {
+                            trade.expected_profit_after_costs > best.expected_profit_after_costs
+                        });
+                        if beats_best {
+                            best_trade = Some(trade);
+                        }
+                    }
+                    Err(reason) => print_logs::trade_skipped(&direction_label, &reason),
                 }
-                Err(reason) => print_logs::trade_skipped(&direction_label, &reason),
             }
+        }
+        if let Some(trade) = best_trade {
+            self.start_trade_unless_one_is_running(trade);
         }
     }
 
