@@ -4,18 +4,25 @@
 //!
 //! Instruction order (each line runs only if every line above succeeded):
 //!
+//! Two signed shapes, because the bribe is different and the bytes must differ:
+//!
+//! - **Jito:** compute-unit *limit* + tip. No price-per-CU (the auction ranks
+//!   on the tip).
+//! - **RPC fallback:** compute-unit limit + price-per-CU. No tip. Sent only if
+//!   the Jito send itself fails, never in parallel (a public copy can be copied).
+//!
 //! ```text
-//!  1. set compute-unit limit          ┐ compute budget
-//!  2. set compute-unit price          ┘
+//!  1. set compute-unit limit
+//!  2. set compute-unit price          only on the RPC-shaped transaction
 //!  3. create wSOL account if missing  ┐ make sure the wallet can hold both tokens
 //!  4. create USDC account if missing  ┘
 //!  5. wallet mode: wrap SOL (transfer + sync_native)
 //!     flash mode:  flash-borrow wSOL from Kamino
 //!  6. leg 1: sell wSOL for USDC on the expensive pool
-//!  7. leg 2: buy wSOL with USDC on the cheap pool (minimum out = start + costs + min profit)
+//!  7. leg 2: buy wSOL with USDC on the cheap pool (minimum out = start + *this route's* costs + min profit)
 //!  8. flash mode: repay the flash loan
 //!  9. close the wSOL account → back to plain SOL (profit included)
-//! 10. Jito tip (last, so it is only paid if everything worked)
+//! 10. Jito tip (last, so it is only paid if everything worked)  only on the Jito-shaped transaction
 //! ```
 //!
 //! **v0 message and address lookup tables:** a transaction may be at most
@@ -29,7 +36,7 @@ use solana_instruction::Instruction;
 use solana_message::{AddressLookupTableAccount, VersionedMessage, v0};
 
 use super::compute_budget_instructions::{set_compute_unit_limit, set_compute_unit_price};
-use super::decide_if_trade_is_worth_it::ApprovedArbitrageTrade;
+use super::decide_if_trade_is_worth_it::{ApprovedArbitrageTrade, priority_fee_in_lamports};
 use super::flash_loan_instructions::FlashLoanProvider;
 use super::jito_tip_instruction::jito_tip_instruction;
 use super::swap_leg_instruction::{SwapLeg, build_swap_instruction};
@@ -52,8 +59,9 @@ pub enum FundingSource<'a> {
 /// Knobs that shape the transaction but are not part of the trade itself.
 pub struct TransactionFeeSettings {
     pub compute_unit_limit: u32,
+    /// `0` on the Jito-shaped transaction: that route does not set a price.
     pub priority_fee_micro_lamports_per_compute_unit: u64,
-    /// `(tip account, lamports)`, or `None` when not sending through Jito.
+    /// `(tip account, lamports)` on the Jito-shaped transaction; `None` on RPC.
     pub jito_tip: Option<(PublicKeyBytes, u64)>,
 }
 
@@ -70,12 +78,22 @@ pub fn main_arbitrage_instructions(
     let start_token_account = wallet.associated_token_account(&start_token_mint);
     let bridge_token_account = wallet.associated_token_account(&bridge_token_mint);
 
-    let mut instructions = vec![
-        set_compute_unit_limit(fees.compute_unit_limit),
-        set_compute_unit_price(fees.priority_fee_micro_lamports_per_compute_unit),
-        create_associated_token_account_if_missing(&owner, &owner, &start_token_mint),
-        create_associated_token_account_if_missing(&owner, &owner, &bridge_token_mint),
-    ];
+    let mut instructions = vec![set_compute_unit_limit(fees.compute_unit_limit)];
+    if fees.priority_fee_micro_lamports_per_compute_unit > 0 {
+        instructions.push(set_compute_unit_price(
+            fees.priority_fee_micro_lamports_per_compute_unit,
+        ));
+    }
+    instructions.push(create_associated_token_account_if_missing(
+        &owner,
+        &owner,
+        &start_token_mint,
+    ));
+    instructions.push(create_associated_token_account_if_missing(
+        &owner,
+        &owner,
+        &bridge_token_mint,
+    ));
 
     let flash_borrow_instruction_index = instructions.len();
     match funding {
@@ -108,7 +126,15 @@ pub fn main_arbitrage_instructions(
         cached_tick_arrays: &trade.buy_pool_tick_arrays,
         direction: SwapDirection::TokenBToTokenA,
         amount_in: trade.leg_2_bridge_token_amount_in,
-        minimum_amount_out: trade.leg_2_minimum_start_token_out,
+        minimum_amount_out: trade.leg_2_minimum_start_token_out_paying(
+            priority_fee_in_lamports(
+                fees.compute_unit_limit,
+                fees.priority_fee_micro_lamports_per_compute_unit,
+            ),
+            fees.jito_tip
+                .map(|(_, tip_lamports)| tip_lamports)
+                .unwrap_or(0),
+        ),
         wallet: owner,
         wallet_token_a_account: start_token_account,
         wallet_token_b_account: bridge_token_account,

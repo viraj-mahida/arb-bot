@@ -7,8 +7,11 @@
 //!    trip, so it is off by default: the local quote already sized the trade,
 //!    and the on-chain minimum-output checks revert a stale trade anyway.
 //! 2. **Stop** unless `SEND_TRANSACTIONS=true` (the safe default).
-//! 3. **Send** through Jito as a bundle (falls back to plain RPC if Jito
-//!    refuses), or through RPC when no block engine is configured.
+//! 3. **Send** the Jito-shaped transaction (compute-unit limit + tip, no
+//!    priority price) as a bundle. If that HTTP send fails, fall back to the
+//!    RPC-shaped transaction (compute-unit limit + priority price, no tip).
+//!    The two are never sent together. With no block engine, only the RPC
+//!    shape is built.
 //! 4. **Confirm** by polling the signature until it is `confirmed`, fails,
 //!    or the blockhash expires. Then measure the real SOL change.
 
@@ -28,9 +31,17 @@ pub struct SendingClients<'a> {
     pub jito: Option<&'a JitoBlockEngineClient>,
 }
 
+/// The two signed shapes. At least one is present.
+pub struct RouteTransactions<'a> {
+    /// Compute-unit limit + tip, no priority price.
+    pub jito: Option<&'a SignedTransaction>,
+    /// Compute-unit limit + priority price, no tip.
+    pub rpc: Option<&'a SignedTransaction>,
+}
+
 pub async fn main_simulate_then_send_if_allowed(
     clients: &SendingClients<'_>,
-    transaction: &SignedTransaction,
+    routes: &RouteTransactions<'_>,
     wallet: &PublicKeyBytes,
     simulate_on_rpc: bool,
     send_real_transactions: bool,
@@ -38,12 +49,15 @@ pub async fn main_simulate_then_send_if_allowed(
     if !simulate_on_rpc && !send_real_transactions {
         return print_logs::send_skipped_simulate_only();
     }
+    let Some(primary) = routes.jito.or(routes.rpc) else {
+        return print_logs::trade_build_failed("no transaction to send");
+    };
 
     let balance_before = if simulate_on_rpc {
         let balance_before = clients.rpc.get_balance(wallet).await.ok();
         let simulation = match clients
             .rpc
-            .simulate_transaction(&transaction.wire_bytes, wallet)
+            .simulate_transaction(&primary.wire_bytes, wallet)
             .await
         {
             Ok(simulation) => simulation,
@@ -63,47 +77,58 @@ pub async fn main_simulate_then_send_if_allowed(
     } else {
         // Read concurrently so the balance lookup never delays the send; the
         // transaction cannot land before this read is served.
-        let (balance_before, accepted) = tokio::join!(
-            clients.rpc.get_balance(wallet),
-            submit(clients, transaction)
-        );
-        if !accepted {
+        let (balance_before, accepted) =
+            tokio::join!(clients.rpc.get_balance(wallet), submit(clients, routes));
+        let Some(accepted) = accepted else {
             return;
-        }
-        balance_before.ok()
+        };
+        return wait_for_confirmation(
+            clients.rpc,
+            &accepted.signature_base58,
+            wallet,
+            balance_before.ok(),
+        )
+        .await;
     };
 
-    if simulate_on_rpc && !submit(clients, transaction).await {
+    let Some(accepted) = submit(clients, routes).await else {
         return;
-    }
+    };
     wait_for_confirmation(
         clients.rpc,
-        &transaction.signature_base58,
+        &accepted.signature_base58,
         wallet,
         balance_before,
     )
     .await;
 }
 
-/// Returns `true` if some route accepted the transaction.
-async fn submit(clients: &SendingClients<'_>, transaction: &SignedTransaction) -> bool {
-    if let Some(jito) = clients.jito {
+/// Returns the transaction some route accepted.
+///
+/// Jito is tried first. RPC runs only when there is no block engine, or when
+/// `sendBundle` itself fails — not when a bundle is merely dropped later.
+async fn submit<'a>(
+    clients: &SendingClients<'_>,
+    routes: &RouteTransactions<'a>,
+) -> Option<&'a SignedTransaction> {
+    if let (Some(jito), Some(transaction)) = (clients.jito, routes.jito) {
         match jito.send_bundle(&transaction.wire_bytes).await {
             Ok(_bundle_id) => {
                 print_logs::sent("jito bundle", &transaction.signature_base58);
-                return true;
+                return Some(transaction);
             }
             Err(error) => print_logs::send_failed("jito bundle", &error),
         }
     }
+    let transaction = routes.rpc?;
     match clients.rpc.send_transaction(&transaction.wire_bytes).await {
         Ok(signature) => {
             print_logs::sent("rpc", &signature);
-            true
+            Some(transaction)
         }
         Err(error) => {
             print_logs::send_failed("rpc", &error);
-            false
+            None
         }
     }
 }

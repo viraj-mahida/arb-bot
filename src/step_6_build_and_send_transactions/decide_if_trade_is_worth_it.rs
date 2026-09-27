@@ -4,9 +4,10 @@
 //! That "gross" profit ignores what it costs to get a transaction on-chain:
 //!
 //! - **Network (signature) fee:** 5,000 lamports per signature, always paid.
-//! - **Priority fee:** `compute_unit_limit × price_per_unit / 1,000,000`
-//!   lamports. Validators schedule higher-paying transactions first.
-//! - **Jito tip:** a flat payment to the block builder for bundle inclusion.
+//! - **One inclusion bribe, not both.** The Jito-shaped transaction pays a
+//!   **tip** and no priority price. The RPC-shaped fallback pays a **priority
+//!   fee** (`compute_unit_limit × price_per_unit / 1,000,000` lamports) and no
+//!   tip. This check uses whichever bribe the first send would pay.
 //! - **Flash-loan fee:** a small percentage of the borrowed amount (flash mode only).
 //!
 //! A trade is approved only if, after all of that, at least
@@ -84,7 +85,7 @@ pub fn main_decide_if_trade_is_worth_it(
             leg_2.output_amount
         };
 
-    let costs = estimate_transaction_costs(rules, round_trip.start_token_amount_in);
+    let costs = costs_of_primary_send_route(rules, round_trip.start_token_amount_in);
     let profit_before_costs =
         i128::from(expected_start_token_out) - i128::from(round_trip.start_token_amount_in);
     let expected_profit_after_costs = profit_before_costs - i128::from(costs.total());
@@ -175,22 +176,51 @@ impl EstimatedTransactionCosts {
     }
 }
 
-/// Add up the costs of a trade that starts with `start_token_amount_in` lamports.
+/// Lamports charged for a compute-unit price: `limit × micro_lamports / 1_000_000`, rounded up.
+pub fn priority_fee_in_lamports(
+    compute_unit_limit: u32,
+    micro_lamports_per_compute_unit: u64,
+) -> u64 {
+    let priority_fee_micro_lamports =
+        u128::from(compute_unit_limit) * u128::from(micro_lamports_per_compute_unit);
+    saturate_to_u64(priority_fee_micro_lamports.div_ceil(MICRO_LAMPORTS_PER_LAMPORT))
+}
+
+/// Costs of the transaction we try first.
+///
+/// A configured Jito tip means the first send is a bundle: signature + tip +
+/// flash-loan fee, and **no** priority fee. Otherwise the first send is RPC:
+/// signature + priority fee + flash-loan fee, and **no** tip.
+pub fn costs_of_primary_send_route(
+    rules: &TradeDecisionRules,
+    start_token_amount_in: u64,
+) -> EstimatedTransactionCosts {
+    let mut costs = estimate_transaction_costs(rules, start_token_amount_in);
+    if rules.jito_tip_lamports > 0 {
+        costs.priority_fee = 0;
+    } else {
+        costs.jito_tip = 0;
+    }
+    costs
+}
+
+/// Add up every cost field on `rules`.
 ///
 /// Fractions of a lamport are rounded *up*: over-estimating a cost can only
 /// make us skip a trade, under-estimating could make us lose money.
+/// Prefer [`costs_of_primary_send_route`] for the approve/skip check — a
+/// landed transaction pays one inclusion bribe, not both.
 pub fn estimate_transaction_costs(
     rules: &TradeDecisionRules,
     start_token_amount_in: u64,
 ) -> EstimatedTransactionCosts {
-    let priority_fee_micro_lamports = u128::from(rules.compute_unit_limit)
-        * u128::from(rules.priority_fee_micro_lamports_per_compute_unit);
     let flash_loan_fee_scaled =
         u128::from(start_token_amount_in) * u128::from(rules.flash_loan_fee_in_basis_points);
     EstimatedTransactionCosts {
         network_signature_fee: LAMPORTS_PER_SIGNATURE * SIGNATURES_PER_TRANSACTION,
-        priority_fee: saturate_to_u64(
-            priority_fee_micro_lamports.div_ceil(MICRO_LAMPORTS_PER_LAMPORT),
+        priority_fee: priority_fee_in_lamports(
+            rules.compute_unit_limit,
+            rules.priority_fee_micro_lamports_per_compute_unit,
         ),
         jito_tip: rules.jito_tip_lamports,
         flash_loan_fee: saturate_to_u64(flash_loan_fee_scaled.div_ceil(BASIS_POINTS_PER_WHOLE)),
@@ -229,6 +259,26 @@ pub struct ApprovedArbitrageTrade {
     pub expected_profit_after_costs: i128,
     /// `true` when the best size was larger than `MAX_TRADE_INPUT_LAMPORTS` and got capped.
     pub size_was_capped: bool,
+}
+
+impl ApprovedArbitrageTrade {
+    /// Leg 2's minimum SOL out for a transaction that pays this priority fee and tip.
+    ///
+    /// The stored minimum matches the primary route. The other shape (RPC
+    /// fallback, or Jito) substitutes its own bribe so the chain still reverts
+    /// a trade that would not cover *that* transaction's costs.
+    pub fn leg_2_minimum_start_token_out_paying(&self, priority_fee: u64, jito_tip: u64) -> u64 {
+        let minimum_profit = self
+            .leg_2_minimum_start_token_out
+            .saturating_sub(self.start_token_amount_in)
+            .saturating_sub(self.costs.total());
+        self.start_token_amount_in
+            .saturating_add(self.costs.network_signature_fee)
+            .saturating_add(self.costs.flash_loan_fee)
+            .saturating_add(priority_fee)
+            .saturating_add(jito_tip)
+            .saturating_add(minimum_profit)
+    }
 }
 
 /// Why the bot decided not to trade this time.

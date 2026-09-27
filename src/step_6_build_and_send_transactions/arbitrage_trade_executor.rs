@@ -26,7 +26,9 @@ use super::decide_if_trade_is_worth_it::{
 };
 use super::flash_loan_instructions::{FlashLoanProvider, KaminoFlashLoanAccounts};
 use super::jito_tip_instruction::{default_jito_tip_accounts, pick_tip_account};
-use super::send_and_confirm::{SendingClients, main_simulate_then_send_if_allowed};
+use super::send_and_confirm::{
+    RouteTransactions, SendingClients, main_simulate_then_send_if_allowed,
+};
 use super::trading_wallet::TradingWallet;
 use crate::bot_settings::{BotSettingsFromEnvironment, FundingMode};
 use crate::print_logs;
@@ -180,7 +182,7 @@ impl ArbitrageTradeExecutor {
             Ok(blockhash) => blockhash,
             Err(error) => return print_logs::trade_build_failed(&error),
         };
-        let Ok(recent_blockhash) = recent_blockhash.parse() else {
+        let Ok(recent_blockhash) = recent_blockhash.parse::<solana_hash::Hash>() else {
             return print_logs::trade_build_failed("RPC returned an invalid blockhash");
         };
 
@@ -188,24 +190,38 @@ impl ArbitrageTradeExecutor {
             None => FundingSource::OwnWallet,
             Some(provider) => FundingSource::FlashLoan(provider),
         };
-        let fees = TransactionFeeSettings {
+        let sign = |fees: TransactionFeeSettings| {
+            let instructions = main_arbitrage_instructions(&self.wallet, trade, &funding, &fees);
+            compile_and_sign_v0_transaction(
+                &self.wallet,
+                &instructions,
+                &self.address_lookup_tables,
+                recent_blockhash.clone(),
+            )
+        };
+
+        let jito_transaction = match self
+            .jito
+            .as_ref()
+            .and_then(|_| pick_tip_account(&self.jito_tip_accounts))
+        {
+            Some(tip_account) => match sign(TransactionFeeSettings {
+                compute_unit_limit: self.settings.compute_unit_limit,
+                priority_fee_micro_lamports_per_compute_unit: 0,
+                jito_tip: Some((tip_account, self.settings.jito_tip_lamports)),
+            }) {
+                Ok(transaction) => Some(transaction),
+                Err(error) => return print_logs::trade_build_failed(&error),
+            },
+            None => None,
+        };
+        let rpc_transaction = match sign(TransactionFeeSettings {
             compute_unit_limit: self.settings.compute_unit_limit,
             priority_fee_micro_lamports_per_compute_unit: self
                 .settings
                 .priority_fee_micro_lamports_per_compute_unit,
-            jito_tip: self
-                .jito
-                .as_ref()
-                .and_then(|_| pick_tip_account(&self.jito_tip_accounts))
-                .map(|tip_account| (tip_account, self.settings.jito_tip_lamports)),
-        };
-        let instructions = main_arbitrage_instructions(&self.wallet, trade, &funding, &fees);
-        let transaction = match compile_and_sign_v0_transaction(
-            &self.wallet,
-            &instructions,
-            &self.address_lookup_tables,
-            recent_blockhash,
-        ) {
+            jito_tip: None,
+        }) {
             Ok(transaction) => transaction,
             Err(error) => return print_logs::trade_build_failed(&error),
         };
@@ -214,9 +230,13 @@ impl ArbitrageTradeExecutor {
             rpc: &self.rpc,
             jito: self.jito.as_ref(),
         };
+        let routes = RouteTransactions {
+            jito: jito_transaction.as_ref(),
+            rpc: Some(&rpc_transaction),
+        };
         main_simulate_then_send_if_allowed(
             &clients,
-            &transaction,
+            &routes,
             &self.wallet.address(),
             self.settings.simulate_on_rpc_before_sending,
             self.settings.send_real_transactions,

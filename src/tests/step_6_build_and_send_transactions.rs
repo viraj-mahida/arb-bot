@@ -16,7 +16,8 @@ use crate::step_6_build_and_send_transactions::assemble_arbitrage_transaction::{
 };
 use crate::step_6_build_and_send_transactions::decide_if_trade_is_worth_it::{
     ApprovedArbitrageTrade, CacheFreshness, TradeDecisionRules, WhyTradeWasSkipped,
-    check_cache_is_fresh, estimate_transaction_costs, main_decide_if_trade_is_worth_it,
+    check_cache_is_fresh, costs_of_primary_send_route, estimate_transaction_costs,
+    main_decide_if_trade_is_worth_it,
 };
 use crate::step_6_build_and_send_transactions::flash_loan_instructions::{
     FlashLoanProvider, KaminoFlashLoanAccounts,
@@ -93,6 +94,19 @@ fn transaction_costs_add_signature_priority_tip_and_flash_fees() {
     assert_eq!(costs.jito_tip, 10_000);
     assert_eq!(costs.flash_loan_fee, 1_000_000); // 10 bps of 1 SOL
     assert_eq!(costs.total(), 1_019_000);
+
+    let jito_route = costs_of_primary_send_route(&test_rules(), 1_000_000_000);
+    assert_eq!(jito_route.priority_fee, 0);
+    assert_eq!(jito_route.jito_tip, 10_000);
+    let rpc_route = costs_of_primary_send_route(
+        &TradeDecisionRules {
+            jito_tip_lamports: 0,
+            ..test_rules()
+        },
+        1_000_000_000,
+    );
+    assert_eq!(rpc_route.priority_fee, 4_000);
+    assert_eq!(rpc_route.jito_tip, 0);
 
     let one_lamport_loan = estimate_transaction_costs(
         &TradeDecisionRules {
@@ -258,13 +272,12 @@ fn wallet_funded_transaction_has_expected_instruction_order() {
     let wallet = TradingWallet::from_keypair(Keypair::new());
     let fees = TransactionFeeSettings {
         compute_unit_limit: 400_000,
-        priority_fee_micro_lamports_per_compute_unit: 10_000,
+        priority_fee_micro_lamports_per_compute_unit: 0,
         jito_tip: Some(([11u8; 32], 10_000)),
     };
     let instructions =
         main_arbitrage_instructions(&wallet, &trade, &FundingSource::OwnWallet, &fees);
     let expected = [
-        COMPUTE_BUDGET_PROGRAM_ADDRESS,
         COMPUTE_BUDGET_PROGRAM_ADDRESS,
         ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ADDRESS,
         ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ADDRESS,
@@ -299,7 +312,7 @@ fn flash_loan_transaction_borrows_first_and_repays_after_both_legs() {
     });
     let fees = TransactionFeeSettings {
         compute_unit_limit: 400_000,
-        priority_fee_micro_lamports_per_compute_unit: 0,
+        priority_fee_micro_lamports_per_compute_unit: 10_000,
         jito_tip: None,
     };
     let instructions =
