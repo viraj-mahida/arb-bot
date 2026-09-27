@@ -52,19 +52,16 @@
 //! **What comes next:** Step 5 decides *how much* to trade, then uses this
 //! step to quote that amount precisely.
 
-mod current_tick_array_check;
-mod orca_whirlpool_swap_quote;
-mod quote_swap_exact_input;
-mod raydium_clmm_swap_quote;
+mod functions;
 mod swap_quote_types;
+
+mod quote_swap_exact_input;
 mod two_pool_arbitrage_round_trip;
 
-pub use current_tick_array_check::is_tick_array_for_current_price_cached;
+pub use functions::is_tick_array_for_current_price_cached;
 #[allow(unused_imports)]
 // single-swap quoting; used by tests and by the future transaction step
-pub use quote_swap_exact_input::quote_swap_exact_input;
+pub use quote_swap_exact_input::main_quote_swap_exact_input;
 pub use swap_quote_types::*;
 pub(crate) use two_pool_arbitrage_round_trip::CachedOrcaAndRaydiumPools;
-pub use two_pool_arbitrage_round_trip::{
-    quote_probe_round_trips_from_cache, quote_two_pool_round_trip,
-};
+pub use two_pool_arbitrage_round_trip::main_quote_two_pool_round_trip;

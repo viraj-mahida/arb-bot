@@ -9,7 +9,7 @@ use orca_whirlpools_core::{
     swap_quote_by_input_token,
 };
 
-use super::swap_quote_types::{SwapDirection, SwapQuoteForExactInput, WhySwapQuoteFailed};
+use super::super::swap_quote_types::{SwapDirection, SwapQuoteForExactInput, WhySwapQuoteFailed};
 use crate::step_3_store_latest_pool_state::{
     ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks,
 };
@@ -17,7 +17,7 @@ use crate::step_3_store_latest_pool_state::{
 /// Orca's quote function accepts between 1 and 6 tick arrays.
 const MAXIMUM_TICK_ARRAYS_ORCA_ACCEPTS: usize = 6;
 
-pub(super) fn quote_orca_whirlpool_swap(
+pub(crate) fn quote_orca_whirlpool_swap(
     pool: &ConcentratedLiquidityPoolState,
     cached_tick_arrays: &[TickArrayAccountWithInitializedTicks],
     input_amount: u64,

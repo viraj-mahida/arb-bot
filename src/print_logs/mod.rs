@@ -8,7 +8,6 @@
 //! - `[geyser/tick-array]` live stream: a tick-array account changed
 //! - `[rpc/tick-array]`    one-time RPC load of tick arrays we just started watching
 //! - `[snapshot]`          what the cache holds right now, both pools side by side
-//! - `[quote 0.1 SOL]`     round trip at a small fixed size
 //! - `[best size]`         round trip at the profit-maximizing size from Step 5
 //! - `[trade]`             trading setup at startup (wallet, funding mode, safety switch)
 //! - `[decide]`            Step 6's verdict after every cost
@@ -16,7 +15,12 @@
 //! - `[send]`              real submission and confirmation
 //!
 //! All printing lives here so the numbered steps stay about logic, not formatting.
+//!
+//! The same lines are copied to `logs/arb-bot.log` (override with `LOG_FILE`)
+//! because the live stream scrolls the terminal faster than a person can read.
 
+#[macro_use]
+mod output;
 mod account_update_logs;
 mod arbitrage_quote_logs;
 mod pool_snapshot_logs;
@@ -25,6 +29,7 @@ mod trade_execution_logs;
 
 pub use account_update_logs::*;
 pub use arbitrage_quote_logs::*;
+pub use output::start_copying_to_file;
 pub use pool_snapshot_logs::*;
 pub use startup_banner::*;
 pub use trade_execution_logs::*;

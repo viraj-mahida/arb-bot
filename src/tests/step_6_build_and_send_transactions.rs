@@ -11,12 +11,12 @@ use crate::step_3_store_latest_pool_state::known_program_and_pool_addresses::{
 use crate::step_3_store_latest_pool_state::{DexProgram, parse_base58_public_key};
 use crate::step_4_quote_swaps::SwapDirection;
 use crate::step_6_build_and_send_transactions::assemble_arbitrage_transaction::{
-    FundingSource, MAX_TRANSACTION_SIZE_IN_BYTES, TransactionFeeSettings, arbitrage_instructions,
-    compile_and_sign_v0_transaction,
+    FundingSource, MAX_TRANSACTION_SIZE_IN_BYTES, TransactionFeeSettings,
+    compile_and_sign_v0_transaction, main_arbitrage_instructions,
 };
 use crate::step_6_build_and_send_transactions::decide_if_trade_is_worth_it::{
     ApprovedArbitrageTrade, CacheFreshness, TradeDecisionRules, WhyTradeWasSkipped,
-    check_cache_is_fresh, decide_if_trade_is_worth_it, estimate_transaction_costs,
+    check_cache_is_fresh, estimate_transaction_costs, main_decide_if_trade_is_worth_it,
 };
 use crate::step_6_build_and_send_transactions::flash_loan_instructions::{
     FlashLoanProvider, KaminoFlashLoanAccounts,
@@ -66,7 +66,7 @@ fn profitable_trade(rules: &TradeDecisionRules) -> ApprovedArbitrageTrade {
     raydium.pool_address = [9u8; 32];
     let mut raydium_tick_array = raydium_tick_array;
     raydium_tick_array.pool_address = raydium.pool_address;
-    decide_if_trade_is_worth_it(
+    main_decide_if_trade_is_worth_it(
         &orca,
         &[orca_tick_array],
         &raydium,
@@ -147,7 +147,7 @@ fn equal_prices_are_not_traded() {
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 0);
     let (raydium, raydium_tick_array) =
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::RaydiumClmm, DEEP_LIQUIDITY, 0);
-    let decision = decide_if_trade_is_worth_it(
+    let decision = main_decide_if_trade_is_worth_it(
         &orca,
         &[orca_tick_array],
         &raydium,
@@ -261,7 +261,8 @@ fn wallet_funded_transaction_has_expected_instruction_order() {
         priority_fee_micro_lamports_per_compute_unit: 10_000,
         jito_tip: Some(([11u8; 32], 10_000)),
     };
-    let instructions = arbitrage_instructions(&wallet, &trade, &FundingSource::OwnWallet, &fees);
+    let instructions =
+        main_arbitrage_instructions(&wallet, &trade, &FundingSource::OwnWallet, &fees);
     let expected = [
         COMPUTE_BUDGET_PROGRAM_ADDRESS,
         COMPUTE_BUDGET_PROGRAM_ADDRESS,
@@ -302,7 +303,7 @@ fn flash_loan_transaction_borrows_first_and_repays_after_both_legs() {
         jito_tip: None,
     };
     let instructions =
-        arbitrage_instructions(&wallet, &trade, &FundingSource::FlashLoan(&provider), &fees);
+        main_arbitrage_instructions(&wallet, &trade, &FundingSource::FlashLoan(&provider), &fees);
     let expected = [
         COMPUTE_BUDGET_PROGRAM_ADDRESS,
         COMPUTE_BUDGET_PROGRAM_ADDRESS,

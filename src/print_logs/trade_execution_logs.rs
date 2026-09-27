@@ -13,7 +13,7 @@ fn sol(lamports: impl Into<f64>) -> f64 {
 }
 
 pub fn trading_disabled(reason: &str) {
-    println!("[trade] disabled: {reason}  (watching and quoting only)");
+    log_line!("[trade] disabled: {reason}  (watching and quoting only)");
 }
 
 pub fn trading_ready(
@@ -30,11 +30,11 @@ pub fn trading_ready(
     } else {
         "simulate only"
     };
-    println!(
+    log_line!(
         "[trade] wallet {}  funding={funding}  mode={mode}",
         encode_public_key_as_base58(wallet)
     );
-    println!(
+    log_line!(
         "[trade] max input {:.4} SOL  min profit {:.6} SOL  priority {} µlamports/CU × {} CU  tip {:.6} SOL  via {}  lookup tables {lookup_table_count}",
         sol(settings.max_trade_input_lamports as f64),
         sol(settings.min_profit_after_costs_lamports as f64),
@@ -57,7 +57,7 @@ pub fn trade_skipped(direction_label: &str, reason: &WhyTradeWasSkipped) {
     ) {
         return;
     }
-    println!("[decide]  {direction_label}  skip: {reason}");
+    log_line!("[decide]  {direction_label}  skip: {reason}");
 }
 
 pub fn trade_approved(trade: &ApprovedArbitrageTrade) {
@@ -66,7 +66,7 @@ pub fn trade_approved(trade: &ApprovedArbitrageTrade) {
     } else {
         ""
     };
-    println!(
+    log_line!(
         "[decide]  {}→{}  TRADE  in {:.4} SOL  expected out {:.6} SOL  costs {:.6} SOL (fee {} + priority {} + tip {} + flash {} lamports)  net {:+.6} SOL{capped_note}",
         trade.sell_pool.dex.name(),
         trade.buy_pool.dex.name(),
@@ -82,11 +82,11 @@ pub fn trade_approved(trade: &ApprovedArbitrageTrade) {
 }
 
 pub fn trade_already_in_flight() {
-    println!("[decide]  skip: previous trade still in flight");
+    log_line!("[decide]  skip: previous trade still in flight");
 }
 
 pub fn trade_build_failed(error: &str) {
-    println!("[simulate] could not build transaction: {error}");
+    log_line!("[simulate] could not build transaction: {error}");
 }
 
 pub fn simulation_succeeded(compute_units: Option<u64>, wallet_lamports_change: Option<i128>) {
@@ -94,45 +94,45 @@ pub fn simulation_succeeded(compute_units: Option<u64>, wallet_lamports_change: 
     let change = wallet_lamports_change.map_or("?".to_string(), |change| {
         format!("{:+.6} SOL", change as f64 / LAMPORTS_PER_SOL)
     });
-    println!(
+    log_line!(
         "[simulate] ok  compute units {units}  wallet SOL change {change} (network fee may be excluded)"
     );
 }
 
 pub fn simulation_failed(error: &str, logs: &[String]) {
-    println!("[simulate] FAILED: {error}");
+    log_line!("[simulate] FAILED: {error}");
     for line in logs.iter().rev().take(SIMULATION_LOG_LINES_TO_SHOW).rev() {
-        println!("[simulate]   {line}");
+        log_line!("[simulate]   {line}");
     }
 }
 
 pub fn simulation_request_failed(error: &str) {
-    println!("[simulate] request failed: {error}");
+    log_line!("[simulate] request failed: {error}");
 }
 
 pub fn send_skipped_simulate_only() {
-    println!("[send] skipped: SEND_TRANSACTIONS=false (simulate-only mode)");
+    log_line!("[send] skipped: SEND_TRANSACTIONS=false (dry-run mode)");
 }
 
 pub fn sent(route: &str, signature: &str) {
-    println!("[send] submitted via {route}  signature {signature}");
+    log_line!("[send] submitted via {route}  signature {signature}");
 }
 
 pub fn send_failed(route: &str, error: &str) {
-    println!("[send] {route} failed: {error}");
+    log_line!("[send] {route} failed: {error}");
 }
 
 pub fn transaction_landed(signature: &str, wallet_lamports_change: Option<i128>) {
     let change = wallet_lamports_change.map_or("?".to_string(), |change| {
         format!("{:+.6} SOL", change as f64 / LAMPORTS_PER_SOL)
     });
-    println!("[send] CONFIRMED {signature}  wallet SOL change {change}");
+    log_line!("[send] CONFIRMED {signature}  wallet SOL change {change}");
 }
 
 pub fn transaction_failed_on_chain(signature: &str, error: &str) {
-    println!("[send] landed but FAILED {signature}: {error}");
+    log_line!("[send] landed but FAILED {signature}: {error}");
 }
 
 pub fn transaction_not_landed(signature: &str) {
-    println!("[send] not landed (dropped or expired) {signature}");
+    log_line!("[send] not landed (dropped or expired) {signature}");
 }

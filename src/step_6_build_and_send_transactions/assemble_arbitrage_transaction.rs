@@ -1,4 +1,6 @@
-//! Put every instruction in order, compile a v0 message, and sign it.
+//! **Sub-step 6.2.** Put every instruction in order, compile a v0 message, and sign it.
+//!
+//! **Start here:** [`main_arbitrage_instructions`].
 //!
 //! Instruction order (each line runs only if every line above succeeded):
 //!
@@ -56,7 +58,7 @@ pub struct TransactionFeeSettings {
 }
 
 /// Every instruction of the round trip, in execution order.
-pub fn arbitrage_instructions(
+pub fn main_arbitrage_instructions(
     wallet: &TradingWallet,
     trade: &ApprovedArbitrageTrade,
     funding: &FundingSource,

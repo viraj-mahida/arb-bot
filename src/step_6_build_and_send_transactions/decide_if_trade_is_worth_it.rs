@@ -1,4 +1,4 @@
-//! The last check before spending money: is this trade *really* worth it?
+//! **Sub-step 6.1.** The last check before spending money: is this trade *really* worth it?
 //!
 //! Step 5 found a round trip that ends with more SOL than it started with.
 //! That "gross" profit ignores what it costs to get a transaction on-chain:
@@ -18,15 +18,101 @@
 //! The approved trade also carries two **minimum outputs** (`other_amount_threshold`
 //! in the DEX programs). They turn "we hope it is profitable" into "the chain
 //! guarantees it is, or the whole transaction reverts".
+//!
+//! **Start here:** [`main_decide_if_trade_is_worth_it`]. Helpers and types are below.
 
 use crate::bot_settings::BotSettingsFromEnvironment;
 use crate::step_3_store_latest_pool_state::{
     ConcentratedLiquidityPoolState, DexProgram, TickArrayAccountWithInitializedTicks,
 };
 use crate::step_4_quote_swaps::{
-    SwapDirection, WhySwapQuoteFailed, quote_swap_exact_input, quote_two_pool_round_trip,
+    SwapDirection, WhySwapQuoteFailed, main_quote_swap_exact_input, main_quote_two_pool_round_trip,
 };
-use crate::step_5_find_best_arbitrage_size::quote_most_profitable_two_pool_round_trip;
+use crate::step_5_find_best_arbitrage_size::main_quote_most_profitable_two_pool_round_trip;
+
+/// Run every check and, if they all pass, return the exact trade to build.
+///
+/// Leg 1 sells SOL on `sell_pool`; leg 2 buys SOL back on `buy_pool`.
+pub fn main_decide_if_trade_is_worth_it(
+    sell_pool: &ConcentratedLiquidityPoolState,
+    sell_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    buy_pool: &ConcentratedLiquidityPoolState,
+    buy_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    freshness: CacheFreshness,
+    rules: &TradeDecisionRules,
+) -> Result<ApprovedArbitrageTrade, WhyTradeWasSkipped> {
+    check_cache_is_fresh(&[sell_pool, buy_pool], freshness, rules)?;
+
+    let mut round_trip = main_quote_most_profitable_two_pool_round_trip(
+        sell_pool,
+        sell_pool_tick_arrays,
+        buy_pool,
+        buy_pool_tick_arrays,
+    )?;
+    let size_was_capped = round_trip.start_token_amount_in > rules.max_trade_input_lamports;
+    if size_was_capped {
+        // Profit is a hill in trade size (Step 5), so a smaller size is still
+        // on the profitable side — just not at the very top.
+        round_trip = main_quote_two_pool_round_trip(
+            sell_pool,
+            sell_pool_tick_arrays,
+            buy_pool,
+            buy_pool_tick_arrays,
+            rules.max_trade_input_lamports,
+        )?;
+    }
+    if !round_trip.both_swaps_fully_filled {
+        return Err(WhyTradeWasSkipped::PartialFill);
+    }
+
+    let leg_1_minimum_bridge_token_out = amount_minus_basis_points(
+        round_trip.bridge_token_amount_between_legs,
+        rules.slippage_tolerance_in_basis_points,
+    );
+    // Leg 2 spends exactly what leg 1 is guaranteed to return; with slippage > 0
+    // that is a bit less than the quote, so re-quote leg 2 at that amount.
+    let expected_start_token_out =
+        if leg_1_minimum_bridge_token_out == round_trip.bridge_token_amount_between_legs {
+            round_trip.start_token_amount_out
+        } else {
+            let leg_2 = main_quote_swap_exact_input(
+                buy_pool,
+                buy_pool_tick_arrays,
+                leg_1_minimum_bridge_token_out,
+                SwapDirection::TokenBToTokenA,
+            )?;
+            leg_2.output_amount
+        };
+
+    let costs = estimate_transaction_costs(rules, round_trip.start_token_amount_in);
+    let profit_before_costs =
+        i128::from(expected_start_token_out) - i128::from(round_trip.start_token_amount_in);
+    let expected_profit_after_costs = profit_before_costs - i128::from(costs.total());
+    if expected_profit_after_costs < i128::from(rules.min_profit_after_costs_lamports) {
+        return Err(WhyTradeWasSkipped::NotProfitableAfterCosts {
+            profit_before_costs,
+            total_costs: costs.total(),
+        });
+    }
+
+    Ok(ApprovedArbitrageTrade {
+        sell_pool: sell_pool.clone(),
+        sell_pool_tick_arrays: sell_pool_tick_arrays.to_vec(),
+        buy_pool: buy_pool.clone(),
+        buy_pool_tick_arrays: buy_pool_tick_arrays.to_vec(),
+        start_token_amount_in: round_trip.start_token_amount_in,
+        leg_1_minimum_bridge_token_out,
+        leg_2_bridge_token_amount_in: leg_1_minimum_bridge_token_out,
+        leg_2_minimum_start_token_out: round_trip
+            .start_token_amount_in
+            .saturating_add(costs.total())
+            .saturating_add(rules.min_profit_after_costs_lamports),
+        expected_start_token_out,
+        costs,
+        expected_profit_after_costs,
+        size_was_capped,
+    })
+}
 
 /// Solana charges this many lamports per transaction signature.
 pub const LAMPORTS_PER_SIGNATURE: u64 = 5_000;
@@ -204,90 +290,6 @@ impl std::fmt::Display for WhyTradeWasSkipped {
             ),
         }
     }
-}
-
-/// Run every check and, if they all pass, return the exact trade to build.
-///
-/// Leg 1 sells SOL on `sell_pool`; leg 2 buys SOL back on `buy_pool`.
-pub fn decide_if_trade_is_worth_it(
-    sell_pool: &ConcentratedLiquidityPoolState,
-    sell_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
-    buy_pool: &ConcentratedLiquidityPoolState,
-    buy_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
-    freshness: CacheFreshness,
-    rules: &TradeDecisionRules,
-) -> Result<ApprovedArbitrageTrade, WhyTradeWasSkipped> {
-    check_cache_is_fresh(&[sell_pool, buy_pool], freshness, rules)?;
-
-    let mut round_trip = quote_most_profitable_two_pool_round_trip(
-        sell_pool,
-        sell_pool_tick_arrays,
-        buy_pool,
-        buy_pool_tick_arrays,
-    )?;
-    let size_was_capped = round_trip.start_token_amount_in > rules.max_trade_input_lamports;
-    if size_was_capped {
-        // Profit is a hill in trade size (Step 5), so a smaller size is still
-        // on the profitable side — just not at the very top.
-        round_trip = quote_two_pool_round_trip(
-            sell_pool,
-            sell_pool_tick_arrays,
-            buy_pool,
-            buy_pool_tick_arrays,
-            rules.max_trade_input_lamports,
-        )?;
-    }
-    if !round_trip.both_swaps_fully_filled {
-        return Err(WhyTradeWasSkipped::PartialFill);
-    }
-
-    let leg_1_minimum_bridge_token_out = amount_minus_basis_points(
-        round_trip.bridge_token_amount_between_legs,
-        rules.slippage_tolerance_in_basis_points,
-    );
-    // Leg 2 spends exactly what leg 1 is guaranteed to return; with slippage > 0
-    // that is a bit less than the quote, so re-quote leg 2 at that amount.
-    let expected_start_token_out =
-        if leg_1_minimum_bridge_token_out == round_trip.bridge_token_amount_between_legs {
-            round_trip.start_token_amount_out
-        } else {
-            let leg_2 = quote_swap_exact_input(
-                buy_pool,
-                buy_pool_tick_arrays,
-                leg_1_minimum_bridge_token_out,
-                SwapDirection::TokenBToTokenA,
-            )?;
-            leg_2.output_amount
-        };
-
-    let costs = estimate_transaction_costs(rules, round_trip.start_token_amount_in);
-    let profit_before_costs =
-        i128::from(expected_start_token_out) - i128::from(round_trip.start_token_amount_in);
-    let expected_profit_after_costs = profit_before_costs - i128::from(costs.total());
-    if expected_profit_after_costs < i128::from(rules.min_profit_after_costs_lamports) {
-        return Err(WhyTradeWasSkipped::NotProfitableAfterCosts {
-            profit_before_costs,
-            total_costs: costs.total(),
-        });
-    }
-
-    Ok(ApprovedArbitrageTrade {
-        sell_pool: sell_pool.clone(),
-        sell_pool_tick_arrays: sell_pool_tick_arrays.to_vec(),
-        buy_pool: buy_pool.clone(),
-        buy_pool_tick_arrays: buy_pool_tick_arrays.to_vec(),
-        start_token_amount_in: round_trip.start_token_amount_in,
-        leg_1_minimum_bridge_token_out,
-        leg_2_bridge_token_amount_in: leg_1_minimum_bridge_token_out,
-        leg_2_minimum_start_token_out: round_trip
-            .start_token_amount_in
-            .saturating_add(costs.total())
-            .saturating_add(rules.min_profit_after_costs_lamports),
-        expected_start_token_out,
-        costs,
-        expected_profit_after_costs,
-        size_was_capped,
-    })
 }
 
 /// Refuse to trade on prices that may no longer be true.

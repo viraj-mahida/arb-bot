@@ -1,4 +1,6 @@
-//! Pick the right decoder for an account, based on which DEX owns it.
+//! **Sub-step 2.1.** Pick the right decoder for an account, based on which DEX owns it.
+//!
+//! **Start here:** [`main_decode_pool_account`] / [`main_decode_tick_array_account`].
 //!
 //! Adding a new DEX means adding one match arm in each function below plus its
 //! own decoder file; the rest of the bot does not change.
@@ -10,7 +12,7 @@ use crate::step_3_store_latest_pool_state::{
 };
 
 /// Decode a pool account's bytes. `None` means the bytes did not match the expected layout.
-pub fn decode_pool_account(
+pub fn main_decode_pool_account(
     pool_config: &WatchedPoolConfig,
     account_data: &[u8],
     slot: u64,
@@ -33,7 +35,7 @@ pub fn decode_pool_account(
 }
 
 /// Decode a tick-array account's bytes. `None` means the bytes did not match the expected layout.
-pub fn decode_tick_array_account(
+pub fn main_decode_tick_array_account(
     watched_tick_array: &TickArrayPdaToWatch,
     account_data: &[u8],
     slot: u64,

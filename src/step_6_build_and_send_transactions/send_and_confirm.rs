@@ -1,8 +1,11 @@
-//! Simulate first, send only if allowed, then wait for the result.
+//! **Sub-step 6.3.** Simulate first, send only if allowed, then wait for the result.
 //!
-//! 1. **Simulate** on the RPC node. Free, and it catches almost everything:
-//!    a stale price (minimum output not met), a missing account, too few
-//!    compute units. A failed simulation stops here.
+//! **Start here:** [`main_simulate_then_send_if_allowed`].
+//!
+//! 1. **Simulate** on the RPC node, only if `RPC_SIMULATION=true`. It catches
+//!    a missing account or too few compute units, but costs a full RPC round
+//!    trip, so it is off by default: the local quote already sized the trade,
+//!    and the on-chain minimum-output checks revert a stale trade anyway.
 //! 2. **Stop** unless `SEND_TRANSACTIONS=true` (the safe default).
 //! 3. **Send** through Jito as a bundle (falls back to plain RPC if Jito
 //!    refuses), or through RPC when no block engine is configured.
@@ -25,33 +28,50 @@ pub struct SendingClients<'a> {
     pub jito: Option<&'a JitoBlockEngineClient>,
 }
 
-pub async fn simulate_then_send_if_allowed(
+pub async fn main_simulate_then_send_if_allowed(
     clients: &SendingClients<'_>,
     transaction: &SignedTransaction,
     wallet: &PublicKeyBytes,
+    simulate_on_rpc: bool,
     send_real_transactions: bool,
 ) {
-    let balance_before = clients.rpc.get_balance(wallet).await.ok();
-    let simulation = match clients
-        .rpc
-        .simulate_transaction(&transaction.wire_bytes, wallet)
-        .await
-    {
-        Ok(simulation) => simulation,
-        Err(error) => return print_logs::simulation_request_failed(&error),
-    };
-    if let Some(error) = &simulation.error {
-        return print_logs::simulation_failed(error, &simulation.logs);
-    }
-    print_logs::simulation_succeeded(
-        simulation.compute_units_consumed,
-        lamports_change(balance_before, simulation.watch_address_lamports_after),
-    );
-
-    if !send_real_transactions {
+    if !simulate_on_rpc && !send_real_transactions {
         return print_logs::send_skipped_simulate_only();
     }
-    if !submit(clients, transaction).await {
+
+    let balance_before = if simulate_on_rpc {
+        let balance_before = clients.rpc.get_balance(wallet).await.ok();
+        let simulation = match clients
+            .rpc
+            .simulate_transaction(&transaction.wire_bytes, wallet)
+            .await
+        {
+            Ok(simulation) => simulation,
+            Err(error) => return print_logs::simulation_request_failed(&error),
+        };
+        if let Some(error) = &simulation.error {
+            return print_logs::simulation_failed(error, &simulation.logs);
+        }
+        print_logs::simulation_succeeded(
+            simulation.compute_units_consumed,
+            lamports_change(balance_before, simulation.watch_address_lamports_after),
+        );
+        if !send_real_transactions {
+            return print_logs::send_skipped_simulate_only();
+        }
+        balance_before
+    } else {
+        // Read concurrently so the balance lookup never delays the send; the
+        // transaction cannot land before this read is served.
+        let (balance_before, accepted) =
+            tokio::join!(clients.rpc.get_balance(wallet), submit(clients, transaction));
+        if !accepted {
+            return;
+        }
+        balance_before.ok()
+    };
+
+    if simulate_on_rpc && !submit(clients, transaction).await {
         return;
     }
     wait_for_confirmation(

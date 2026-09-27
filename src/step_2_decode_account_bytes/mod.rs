@@ -20,9 +20,9 @@
 //!
 //! **What comes next:** the decoded structs are saved into Step 3's cache.
 
+mod functions;
+
 mod decoder_for_each_dex;
-pub mod orca_whirlpool_account_decoder;
-pub mod raydium_clmm_account_decoder;
-mod read_little_endian_numbers;
 
 pub use decoder_for_each_dex::*;
+pub use functions::{orca_whirlpool_account_decoder, raydium_clmm_account_decoder};

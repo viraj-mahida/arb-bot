@@ -12,7 +12,7 @@ use crate::step_4_quote_swaps::{
     SwapDirection, WhySwapQuoteFailed, is_tick_array_for_current_price_cached,
 };
 
-pub(super) struct PoolPriceWalkerAlongTicks {
+pub(crate) struct PoolPriceWalkerAlongTicks {
     /// Simulated current price, as `sqrt(price) * 2^64`.
     pub sqrt_price_q64_64: u128,
     /// Simulated current tick index.
@@ -30,7 +30,7 @@ pub(super) struct PoolPriceWalkerAlongTicks {
 }
 
 /// The next place the walker must stop: an initialized tick, or the edge of the cache.
-pub(super) struct NextTickBoundary {
+pub(crate) struct NextTickBoundary {
     pub tick_index: i32,
     /// `true` = a real initialized tick we can cross.
     /// `false` = only the edge of cached data; we must stop, not guess.
@@ -38,7 +38,7 @@ pub(super) struct NextTickBoundary {
 }
 
 impl PoolPriceWalkerAlongTicks {
-    pub(super) fn new(
+    pub(crate) fn new(
         pool: &ConcentratedLiquidityPoolState,
         cached_tick_arrays: &[TickArrayAccountWithInitializedTicks],
     ) -> Result<Self, WhySwapQuoteFailed> {
@@ -89,7 +89,7 @@ impl PoolPriceWalkerAlongTicks {
     ///
     /// "At or below" because a tick exactly at the current index is a boundary
     /// we have not crossed yet when moving down.
-    pub(super) fn next_initialized_tick_below_price(&self) -> NextTickBoundary {
+    pub(crate) fn next_initialized_tick_below_price(&self) -> NextTickBoundary {
         match self
             .initialized_ticks_sorted
             .iter()
@@ -108,7 +108,7 @@ impl PoolPriceWalkerAlongTicks {
     }
 
     /// Where the price stops next when it moves UP (we are buying token A here).
-    pub(super) fn next_initialized_tick_above_price(&self) -> NextTickBoundary {
+    pub(crate) fn next_initialized_tick_above_price(&self) -> NextTickBoundary {
         match self
             .initialized_ticks_sorted
             .iter()
@@ -133,7 +133,7 @@ impl PoolPriceWalkerAlongTicks {
     ///
     /// After crossing downward we sit at `tick_index - 1`, i.e. in the range
     /// just below the tick, so the next search does not find the same tick again.
-    pub(super) fn cross_tick_and_update_liquidity(
+    pub(crate) fn cross_tick_and_update_liquidity(
         &mut self,
         tick_index: i32,
         direction: SwapDirection,

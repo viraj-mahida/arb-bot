@@ -7,8 +7,8 @@ use crate::step_3_store_latest_pool_state::{
 };
 use crate::step_4_quote_swaps::{PROBE_TRADE_INPUT_AMOUNT, WhySwapQuoteFailed};
 use crate::step_5_find_best_arbitrage_size::{
-    find_input_amount_that_maximizes_profit, quote_most_profitable_two_pool_round_trip,
-    quote_watched_orca_and_raydium_pair,
+    main_find_input_amount_that_maximizes_profit, main_quote_most_profitable_two_pool_round_trip,
+    main_quote_watched_orca_and_raydium_pair,
 };
 
 /// Same pool on both sides means no price gap at all, so the best size is zero.
@@ -17,14 +17,16 @@ fn no_arbitrage_when_both_pools_have_the_same_price() {
     let (pool, tick_array) =
         test_pool_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY);
     let tick_arrays = [tick_array];
-    let error = quote_most_profitable_two_pool_round_trip(&pool, &tick_arrays, &pool, &tick_arrays)
-        .unwrap_err();
+    let error =
+        main_quote_most_profitable_two_pool_round_trip(&pool, &tick_arrays, &pool, &tick_arrays)
+            .unwrap_err();
     assert!(matches!(
         error,
         WhySwapQuoteFailed::NoProfitablePriceGapAfterFees
     ));
     assert_eq!(
-        find_input_amount_that_maximizes_profit(&pool, &tick_arrays, &pool, &tick_arrays).unwrap(),
+        main_find_input_amount_that_maximizes_profit(&pool, &tick_arrays, &pool, &tick_arrays)
+            .unwrap(),
         0
     );
 }
@@ -36,7 +38,7 @@ fn no_arbitrage_when_fees_are_bigger_than_the_price_gap() {
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 20);
     let (buy_pool, buy_tick_array) =
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 16);
-    let error = quote_most_profitable_two_pool_round_trip(
+    let error = main_quote_most_profitable_two_pool_round_trip(
         &sell_pool,
         &[sell_tick_array],
         &buy_pool,
@@ -56,7 +58,7 @@ fn wide_price_gap_gives_profitable_size_larger_than_probe() {
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 160);
     let (buy_pool, buy_tick_array) =
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 16);
-    let best = quote_most_profitable_two_pool_round_trip(
+    let best = main_quote_most_profitable_two_pool_round_trip(
         &sell_pool,
         &[sell_tick_array],
         &buy_pool,
@@ -75,7 +77,7 @@ fn trade_size_stops_where_liquidity_runs_out_at_a_tick() {
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 160);
     let (buy_pool, buy_tick_array) =
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 16);
-    let size_without_tick = find_input_amount_that_maximizes_profit(
+    let size_without_tick = main_find_input_amount_that_maximizes_profit(
         &sell_pool,
         std::slice::from_ref(&sell_tick_array),
         &buy_pool,
@@ -91,7 +93,7 @@ fn trade_size_stops_where_liquidity_runs_out_at_a_tick() {
             liquidity_added_when_price_crosses_upward: sell_pool.active_liquidity_at_current_price
                 as i128,
         });
-    let size_with_tick = find_input_amount_that_maximizes_profit(
+    let size_with_tick = main_find_input_amount_that_maximizes_profit(
         &sell_pool,
         &[sell_tick_array],
         &buy_pool,
@@ -115,8 +117,9 @@ fn trade_sizing_fails_when_current_tick_array_is_missing() {
             liquidity_added_when_price_crosses_upward: 1,
         });
     let tick_arrays = [tick_array];
-    let error = quote_most_profitable_two_pool_round_trip(&pool, &tick_arrays, &pool, &tick_arrays)
-        .unwrap_err();
+    let error =
+        main_quote_most_profitable_two_pool_round_trip(&pool, &tick_arrays, &pool, &tick_arrays)
+            .unwrap_err();
     assert!(matches!(
         error,
         WhySwapQuoteFailed::TickArrayForCurrentPriceNotCachedYet
@@ -127,5 +130,5 @@ fn trade_sizing_fails_when_current_tick_array_is_missing() {
 #[test]
 fn watched_pair_quotes_need_both_dexes_in_the_cache() {
     let cache = LatestPoolStateCache::new();
-    assert!(quote_watched_orca_and_raydium_pair(&cache).is_none());
+    assert!(main_quote_watched_orca_and_raydium_pair(&cache).is_none());
 }

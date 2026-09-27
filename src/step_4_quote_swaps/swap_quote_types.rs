@@ -2,10 +2,8 @@
 
 use crate::step_3_store_latest_pool_state::DexProgram;
 
-/// Trade size used for the quick "is there a spread?" probe: 0.1 SOL in lamports.
-///
-/// Kept small so the swap stays inside the tick arrays we have cached. The
-/// real trade size comes from Step 5, not from this number.
+/// Small trade size used in unit tests: 0.1 SOL in lamports.
+#[cfg(test)]
 pub const PROBE_TRADE_INPUT_AMOUNT: u64 = 100_000_000;
 
 /// Which way a swap goes through a pool.

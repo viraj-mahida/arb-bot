@@ -1,23 +1,24 @@
-//! What to do when a pool account changes (usually because someone swapped).
+//! **Sub-step 1.2.** What to do when a pool account changes (usually because someone swapped).
+//!
+//! **Start here:** [`AccountUpdateListener::main_handle_pool_account_update`].
 
 use super::account_update_loop::AccountUpdateListener;
-use super::load_raydium_fee_config::apply_raydium_fee_from_fee_config;
-use super::load_tick_arrays_not_yet_streamed::load_tick_arrays_not_yet_streamed;
+use super::functions::{apply_raydium_fee_from_fee_config, load_tick_arrays_not_yet_streamed};
 use crate::print_logs;
 use crate::solana_connections::subscribe_to_account_updates;
-use crate::step_2_decode_account_bytes::decode_pool_account;
+use crate::step_2_decode_account_bytes::main_decode_pool_account;
 use crate::step_3_store_latest_pool_state::{
     WatchedPoolConfig, encode_public_key_as_base58, tick_array_pdas_near_current_price,
 };
-use crate::step_5_find_best_arbitrage_size::quote_watched_orca_and_raydium_pair;
+use crate::step_5_find_best_arbitrage_size::main_quote_watched_orca_and_raydium_pair;
 
 impl AccountUpdateListener<'_> {
     /// 1. Decode the pool bytes and save them.
     /// 2. Work out which tick arrays surround the (possibly new) price.
     /// 3. For any we were not watching yet: subscribe on Geyser and load them once via RPC.
-    /// 4. Print a snapshot of all pools, then the Step 4/5 quotes for the pair.
+    /// 4. Print a snapshot of all pools, then the profit-maximizing quotes.
     /// 5. If trading is configured, let Step 6 decide whether to trade.
-    pub(super) async fn handle_pool_account_update(
+    pub(super) async fn main_handle_pool_account_update(
         &mut self,
         pool_config: &WatchedPoolConfig,
         account_data: &[u8],
@@ -25,7 +26,7 @@ impl AccountUpdateListener<'_> {
         geyser_write_version: u64,
     ) {
         let Some(mut pool_state) =
-            decode_pool_account(pool_config, account_data, slot, geyser_write_version)
+            main_decode_pool_account(pool_config, account_data, slot, geyser_write_version)
         else {
             print_logs::pool_decode_failed(pool_config.dex, pool_config.pool_address_base58);
             return;
@@ -81,11 +82,11 @@ impl AccountUpdateListener<'_> {
         }
 
         print_logs::pool_snapshot(self.cache);
-        if let Some(quotes) = quote_watched_orca_and_raydium_pair(self.cache) {
+        if let Some(quotes) = main_quote_watched_orca_and_raydium_pair(self.cache) {
             print_logs::print_arbitrage_quotes(&quotes);
         }
         if let Some(trade_executor) = &self.trade_executor {
-            trade_executor.consider_trading(self.cache);
+            trade_executor.main_consider_trading(self.cache);
         }
     }
 }

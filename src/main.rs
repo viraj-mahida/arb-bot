@@ -62,7 +62,7 @@
 
 use crate::bot_settings::BotSettingsFromEnvironment;
 use crate::solana_connections::{SolanaRpcClient, connect_to_geyser_grpc};
-use crate::step_1_listen_to_account_updates::process_account_updates_forever;
+use crate::step_1_listen_to_account_updates::main_process_account_updates_forever;
 use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, WatchedPools};
 use crate::step_6_build_and_send_transactions::ArbitrageTradeExecutor;
 
@@ -88,6 +88,7 @@ async fn main() {
 
     // Load RPC_URL, GRPC_URL, and X_TOKEN from a local `.env` file if present.
     dotenvy::dotenv().ok();
+    print_logs::start_copying_to_file();
 
     let watched_pools = WatchedPools::sol_usdc_pools_on_orca_and_raydium();
     print_logs::startup_banner(&watched_pools);
@@ -111,7 +112,7 @@ async fn main() {
         connect_to_geyser_grpc(&watched_pools)
             .await
             .expect("failed to open Geyser stream");
-    process_account_updates_forever(
+    main_process_account_updates_forever(
         geyser_account_update_stream,
         geyser_subscription_sender,
         &watched_pools,

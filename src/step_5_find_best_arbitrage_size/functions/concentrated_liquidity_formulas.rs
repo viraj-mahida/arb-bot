@@ -77,7 +77,7 @@ const TWO_TO_THE_POWER_64: f64 = (1u128 << 64) as f64;
 /// Example: 101 vs 100 USDC, both fees 0.04% → 101 × 0.9996 × 0.9996 = 100.919,
 /// which is more than 100, so there is a ~0.92% edge. At 100.05 vs 100 the
 /// fees (0.08% total) eat the whole gap and the answer is "no".
-pub(super) fn is_price_gap_bigger_than_both_fees(
+pub(crate) fn is_price_gap_bigger_than_both_fees(
     sell_pool: &PoolPriceWalkerAlongTicks,
     buy_pool: &PoolPriceWalkerAlongTicks,
 ) -> bool {
@@ -116,7 +116,7 @@ pub(super) fn is_price_gap_bigger_than_both_fees(
 ///
 /// Example (normalized L = 1,000,000 on both, 101 vs 100, 0.04% fees) → about
 /// 22,900 USDC, after which another tiny trade earns exactly zero.
-pub(super) fn bridge_amount_until_price_gap_closes(
+pub(crate) fn bridge_amount_until_price_gap_closes(
     sell_pool: &PoolPriceWalkerAlongTicks,
     buy_pool: &PoolPriceWalkerAlongTicks,
 ) -> u64 {
@@ -150,7 +150,7 @@ pub(super) fn bridge_amount_until_price_gap_closes(
 /// buy pool. Moves both walkers' prices and returns how much SOL (gross, fee
 /// included) we had to sell to get that USDC. `None` if the math overflows or
 /// a price would leave the allowed range.
-pub(super) fn move_both_pool_prices_by_bridge_amount(
+pub(crate) fn move_both_pool_prices_by_bridge_amount(
     sell_pool: &mut PoolPriceWalkerAlongTicks,
     buy_pool: &mut PoolPriceWalkerAlongTicks,
     bridge_amount: u64,
@@ -201,7 +201,7 @@ pub(super) fn move_both_pool_prices_by_bridge_amount(
 ///
 /// On overflow returns `u64::MAX`, so a broken value can never win the
 /// "smallest distance" comparison; the other limits stop the step instead.
-pub(super) fn token_b_amount_between_sqrt_prices(
+pub(crate) fn token_b_amount_between_sqrt_prices(
     sqrt_price_a: u128,
     sqrt_price_b: u128,
     liquidity: u128,
@@ -214,7 +214,7 @@ pub(super) fn token_b_amount_between_sqrt_prices(
 ///
 /// `after = before * k`, so `before = after / k = after * 1,000,000 / (1,000,000 − fee)`.
 /// Rounded up: being one unit short would fail on-chain.
-pub(super) fn amount_before_fee_was_taken(
+pub(crate) fn amount_before_fee_was_taken(
     amount_after_fee: u64,
     fee_rate_in_millionths: u32,
 ) -> u64 {

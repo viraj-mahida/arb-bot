@@ -3,26 +3,33 @@
 use crate::step_3_store_latest_pool_state::WatchedPools;
 
 pub fn startup_banner(watched_pools: &WatchedPools) {
-    println!(
+    log_line!(
         "arb-bot  (educational two-pool arbitrage bot; simulate-only unless SEND_TRANSACTIONS=true)"
     );
-    println!();
-    println!("pipeline");
-    println!("  1. listen     Geyser (Yellowstone gRPC) streams live account writes");
-    println!("  2. decode     raw account bytes -> pool state + tick arrays");
-    println!("                RPC getMultipleAccounts loads each new tick array once");
-    println!("                (Geyser only pushes future writes, never current state)");
-    println!("  3. store      in-memory cache holds each pool + its nearby tick arrays");
-    println!("  4. quote      local DEX math quotes a 0.1 SOL round trip");
-    println!("  5. size       walk both tick books to find the profit-maximizing size");
-    println!("  6. print      these logs");
-    println!(
-        "  7. trade      subtract all costs, build + sign the transaction, simulate, (optionally) send"
+    log_line!();
+    log_line!("pipeline");
+    log_line!("  1. listen     Geyser (Yellowstone gRPC) streams live account writes");
+    log_line!("  2. decode     raw account bytes -> pool state + tick arrays");
+    log_line!("                RPC getMultipleAccounts loads each new tick array once");
+    log_line!("                (Geyser only pushes future writes, never current state)");
+    log_line!("  3. store      in-memory cache holds each pool + its nearby tick arrays");
+    log_line!("  4. quote      local DEX math for one swap and a two-pool round trip");
+    log_line!("  5. size       walk both tick books to find the profit-maximizing size");
+    log_line!(
+        "  6. trade      subtract all costs, build + sign the transaction, simulate, (optionally) send"
     );
-    println!();
-    println!("watching");
+    log_line!();
+    match super::output::log_file_path() {
+        Some(path) => log_line!(
+            "writing a copy of every line to {}  (override with LOG_FILE, empty disables)",
+            path.display()
+        ),
+        None => log_line!("log file disabled (LOG_FILE is empty)"),
+    }
+    log_line!();
+    log_line!("watching");
     for pool_config in watched_pools.all_configs() {
-        println!(
+        log_line!(
             "  {:<14}  {}  ({} bps fee, decimals token A {} / token B {})",
             pool_config.dex.name(),
             pool_config.pool_address_base58,
@@ -31,39 +38,41 @@ pub fn startup_banner(watched_pools: &WatchedPools) {
             pool_config.token_b_decimals
         );
     }
-    println!();
-    println!("log tags");
-    println!("  [geyser/pool]        a pool account changed (price / liquidity / current tick)");
-    println!("  [geyser/tick-array]  a tick-array account changed (where liquidity steps are)");
-    println!("  [rpc/tick-array]     one-time fetch of tick arrays we just started watching");
-    println!(
-        "  [snapshot]           both pools as cached now; gap = raydium - orca (USDC per SOL)"
+    log_line!();
+    log_line!("how to read the log  (times are UTC)");
+    log_line!("  [pool]               a pool's price changed (someone swapped)");
+    log_line!(
+        "  [spread]             both prices, the gap between them, and the fees it must beat"
     );
-    println!(
-        "  [quote 0.1 SOL]      sell 0.1 SOL on one pool, buy SOL back on the other (math only)"
+    log_line!(
+        "                       1 bp = 0.01%; two 4 bp swaps cost 8 bps, so smaller gaps lose money"
     );
-    println!("  [best size]          same round trip at the profit-maximizing size (math only)");
-    println!(
+    log_line!(
+        "  [best size]          only when the gap beats fees: the most profitable trade size"
+    );
+    log_line!("  [rpc/tick-array]     one-time load of liquidity data near a new price");
+    log_line!("  [geyser/tick-array]  liquidity data updates (hidden unless LOG_VERBOSE=true)");
+    log_line!(
         "  [decide]             after network fee + priority fee + tip + flash fee: trade or skip"
     );
-    println!("  [simulate]           dry-run of the signed transaction on the RPC node");
-    println!("  [send]               real submission (Jito bundle or RPC) and its confirmation");
-    println!();
+    log_line!("  [simulate]           dry-run of the signed transaction on the RPC node");
+    log_line!("  [send]               real submission (Jito bundle or RPC) and its confirmation");
+    log_line!();
 }
 
 pub fn geyser_connecting() {
-    println!("[geyser] connecting to Yellowstone gRPC…");
+    log_line!("[geyser] connecting to Yellowstone gRPC…");
 }
 
 pub fn geyser_subscribed(pool_count: usize) {
-    println!("[geyser] subscribed to {pool_count} pool account(s), commitment=processed");
+    log_line!("[geyser] subscribed to {pool_count} pool account(s), commitment=processed");
 }
 
 pub fn rpc_client_ready() {
-    println!("[rpc] HTTP client ready  (10s timeout)");
+    log_line!("[rpc] HTTP client ready  (10s timeout)");
 }
 
 pub fn waiting_for_account_updates() {
-    println!("[geyser] waiting for account writes…");
-    println!();
+    log_line!("[geyser] waiting for account writes…");
+    log_line!();
 }

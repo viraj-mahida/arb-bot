@@ -5,13 +5,14 @@
 //! to review — exactly what the bot is allowed to do before you run it.
 //!
 //! **Safe by default:** with no settings at all, the bot only *watches* and
-//! *simulates*. It sends a real transaction only when `SEND_TRANSACTIONS=true`.
+//! *quotes locally*. It sends a real transaction only when `SEND_TRANSACTIONS=true`.
 //!
 //! | Variable                            | Default                                 | Meaning |
 //! |-------------------------------------|-----------------------------------------|---------|
 //! | `WALLET_KEYPAIR_PATH`               | *(none → trading disabled)*             | JSON keypair file (same format as `solana-keygen`) |
 //! | `FUNDING_MODE`                      | `wallet`                                | `wallet` = trade your own SOL, `flash_loan` = borrow it from Kamino |
 //! | `SEND_TRANSACTIONS`                 | `false`                                 | `false` = simulate only, `true` = really send |
+//! | `RPC_SIMULATION`                    | `false`                                 | `true` = dry-run on the RPC node before sending (adds a round trip) |
 //! | `MAX_TRADE_INPUT_LAMPORTS`          | `1000000000` (1 SOL)                    | Largest start amount ever put into leg 1 |
 //! | `MIN_PROFIT_LAMPORTS`               | `10000`                                 | Profit that must remain *after* all costs |
 //! | `PRIORITY_FEE_MICROLAMPORTS_PER_CU` | `10000`                                 | Priority fee price per compute unit |
@@ -59,6 +60,7 @@ pub struct BotSettingsFromEnvironment {
     pub wallet_keypair_path: Option<String>,
     pub funding_mode: FundingMode,
     pub send_real_transactions: bool,
+    pub simulate_on_rpc_before_sending: bool,
     pub max_trade_input_lamports: u64,
     pub min_profit_after_costs_lamports: u64,
     pub priority_fee_micro_lamports_per_compute_unit: u64,
@@ -88,6 +90,7 @@ impl BotSettingsFromEnvironment {
             wallet_keypair_path: read_text("WALLET_KEYPAIR_PATH"),
             funding_mode,
             send_real_transactions: read_bool("SEND_TRANSACTIONS", false),
+            simulate_on_rpc_before_sending: read_bool("RPC_SIMULATION", false),
             max_trade_input_lamports: read_number("MAX_TRADE_INPUT_LAMPORTS", 1_000_000_000),
             min_profit_after_costs_lamports: read_number("MIN_PROFIT_LAMPORTS", 10_000),
             priority_fee_micro_lamports_per_compute_unit: read_number(

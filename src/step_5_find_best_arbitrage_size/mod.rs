@@ -43,9 +43,9 @@
 //! token B (USDC) is the bridge. Other pairs or directions would need the
 //! mirrored formulas.
 
-mod concentrated_liquidity_formulas;
+mod functions;
+
 mod most_profitable_round_trip;
-mod pool_price_walker_along_ticks;
 mod watched_pair_round_trips;
 
 use orca_whirlpools_core::tick_index_to_sqrt_price;
@@ -54,15 +54,14 @@ use crate::step_3_store_latest_pool_state::{
     ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks,
 };
 use crate::step_4_quote_swaps::{SwapDirection, WhySwapQuoteFailed};
-use concentrated_liquidity_formulas::{
-    amount_before_fee_was_taken, bridge_amount_until_price_gap_closes,
+use functions::{
+    PoolPriceWalkerAlongTicks, amount_before_fee_was_taken, bridge_amount_until_price_gap_closes,
     is_price_gap_bigger_than_both_fees, move_both_pool_prices_by_bridge_amount,
     token_b_amount_between_sqrt_prices,
 };
-pub use most_profitable_round_trip::quote_most_profitable_two_pool_round_trip;
-use pool_price_walker_along_ticks::PoolPriceWalkerAlongTicks;
+pub use most_profitable_round_trip::main_quote_most_profitable_two_pool_round_trip;
 pub use watched_pair_round_trips::{
-    WatchedPairRoundTripQuotes, quote_watched_orca_and_raydium_pair,
+    WatchedPairRoundTripQuotes, main_quote_watched_orca_and_raydium_pair,
 };
 
 /// Safety cap on walk steps, so malformed tick data can never loop forever.
@@ -83,9 +82,10 @@ struct WhatStopsThisWalkStep {
 /// Walk both pools together and return the start-token input (lamports) that
 /// maximizes the round trip's profit. Returns 0 when there is no profitable gap.
 ///
-/// This is a size estimate from the tick books; the exact amounts that would
-/// go into a transaction come from quoting this size with Step 4.
-pub fn find_input_amount_that_maximizes_profit(
+/// **Start here** for the size walk. This is a size estimate from the tick books;
+/// the exact amounts that would go into a transaction come from quoting this
+/// size with Step 4.
+pub fn main_find_input_amount_that_maximizes_profit(
     sell_pool: &ConcentratedLiquidityPoolState,
     sell_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
     buy_pool: &ConcentratedLiquidityPoolState,

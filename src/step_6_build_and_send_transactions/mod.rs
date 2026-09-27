@@ -5,7 +5,7 @@
 //!
 //! **What this step does:** turns that quote into real money — carefully.
 //!
-//! 1. **Decide** ([`decide_if_trade_is_worth_it`]): subtract every cost
+//! 1. **Decide** ([`main_decide_if_trade_is_worth_it`]): subtract every cost
 //!    (network fee, priority fee, Jito tip, flash-loan fee), refuse stale data,
 //!    cap the size, and set the minimum outputs that make a loss impossible.
 //! 2. **Fund** leg 1 from the wallet ([`trading_wallet`]: wrap SOL) or with a
@@ -32,19 +32,24 @@
 //! - Raydium's tick-array bitmap extension account is not passed (only needed far from the current price).
 //! - The flash-loan fee is estimated from `FLASH_LOAN_FEE_BPS`, not read from the reserve.
 //! - Flash-loan transactions usually need an address lookup table to fit in 1,232 bytes.
+//!
+//! **Folder layout:** `functions/` holds instruction builders. Pipeline files
+//! use legal Rust module names (`decide_if_trade_is_worth_it.rs`) so the IDE
+//! can find them; the order is 6.1 decide → 6.2 assemble → 6.3 send → 6.4 executor.
+
+pub mod functions;
 
 pub mod arbitrage_trade_executor;
 pub mod assemble_arbitrage_transaction;
-pub mod compute_budget_instructions;
 pub mod decide_if_trade_is_worth_it;
-pub mod flash_loan_instructions;
-pub mod jito_tip_instruction;
-pub mod orca_whirlpool_swap_instruction;
-pub mod raydium_clmm_swap_instruction;
 pub mod send_and_confirm;
-pub mod swap_leg_instruction;
-pub mod trading_wallet;
-pub mod well_known_program_addresses;
+
+#[allow(unused_imports)] // re-exported so tests and docs can name each builder
+pub use functions::{
+    compute_budget_instructions, flash_loan_instructions, jito_tip_instruction,
+    orca_whirlpool_swap_instruction, raydium_clmm_swap_instruction, swap_leg_instruction,
+    trading_wallet, well_known_program_addresses,
+};
 
 pub use arbitrage_trade_executor::ArbitrageTradeExecutor;
 pub use decide_if_trade_is_worth_it::{ApprovedArbitrageTrade, WhyTradeWasSkipped};

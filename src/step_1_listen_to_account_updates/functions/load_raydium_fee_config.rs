@@ -12,7 +12,7 @@ use crate::step_3_store_latest_pool_state::{
 };
 
 /// Replace `pool_state`'s fee with the one in its Raydium `amm_config` account.
-pub(super) async fn apply_raydium_fee_from_fee_config(
+pub(crate) async fn apply_raydium_fee_from_fee_config(
     rpc_client: &SolanaRpcClient,
     cache: &LatestPoolStateCache,
     pool_state: &mut ConcentratedLiquidityPoolState,

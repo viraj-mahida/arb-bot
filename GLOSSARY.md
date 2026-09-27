@@ -105,7 +105,7 @@ Terms are grouped in the order you meet them when reading the steps.
 
 **Exact input**
 - **What it is:** a swap where you fix how much you *send*, and the pool decides how much you *get*.
-- **Where in code:** `quote_swap_exact_input`
+- **Where in code:** `main_quote_swap_exact_input`
 
 **Quote**
 - **What it is:** a prediction of a swap's output, computed locally with the DEX's own math and without sending anything.

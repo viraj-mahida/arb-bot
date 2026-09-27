@@ -1,4 +1,4 @@
-//! In-memory cache holding the newest pool and tick-array state.
+//! **Sub-step 3.1.** In-memory cache holding the newest pool and tick-array state.
 //!
 //! **Why a cache:** asking an RPC server for state takes tens of milliseconds;
 //! arbitrage opportunities often last a single slot (~400ms) and are contested
@@ -72,7 +72,7 @@ impl LatestPoolStateCache {
 
     /// Any one pool owned by `dex`.
     ///
-    /// Current limitation: we watch exactly one pool per DEX, so "the first one"
+    /// TODO? Current limitation: we watch exactly one pool per DEX, so "the first one"
     /// is "the only one". With several pools per DEX the result would be
     /// arbitrary (hash-map order), and callers must switch to
     /// [`Self::pool_state_by_address`].
@@ -81,18 +81,6 @@ impl LatestPoolStateCache {
             .values()
             .find(|pool| pool.dex == dex)
             .cloned()
-    }
-
-    /// Copies of every cached pool state.
-    pub fn all_pool_states(&self) -> Vec<ConcentratedLiquidityPoolState> {
-        read_lock(&self.pool_state_by_pool_address)
-            .values()
-            .cloned()
-            .collect()
-    }
-
-    pub fn pool_count(&self) -> usize {
-        read_lock(&self.pool_state_by_pool_address).len()
     }
 
     /// Remember tick-array addresses we want to watch.

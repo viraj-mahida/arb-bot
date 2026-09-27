@@ -7,10 +7,10 @@
 //! says "account X now holds these bytes". There are only two kinds of
 //! accounts we care about:
 //!
-//! 1. **A pool account** ([`handle_pool_account_update`]) — price or liquidity
+//! 1. **A pool account** ([`main_handle_pool_account_update`]) — price or liquidity
 //!    changed. We decode it, store it, and check whether the price has moved
 //!    close enough to new tick arrays that we should start watching them too.
-//! 2. **A tick-array account** ([`handle_tick_array_account_update`]) — the map
+//! 2. **A tick-array account** ([`main_handle_tick_array_account_update`]) — the map
 //!    of where liquidity changes was updated (someone added or removed
 //!    liquidity). We decode it and store it.
 //!
@@ -24,10 +24,10 @@
 //! printing the snapshot (`print_logs`), and — when trading is configured —
 //! letting Step 6 decide whether to trade, after every pool update.
 
+mod functions;
+
 mod account_update_loop;
 mod handle_pool_account_update;
 mod handle_tick_array_account_update;
-mod load_raydium_fee_config;
-mod load_tick_arrays_not_yet_streamed;
 
-pub use account_update_loop::process_account_updates_forever;
+pub use account_update_loop::main_process_account_updates_forever;

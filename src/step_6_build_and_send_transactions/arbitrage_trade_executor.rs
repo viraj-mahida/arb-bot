@@ -1,4 +1,7 @@
-//! Glue for Step 6: set up once at startup, then decide → build → simulate → send.
+//! **Sub-step 6.4.** Glue for Step 6: set up once at startup, then decide → build → simulate → send.
+//!
+//! **Start here:** [`ArbitrageTradeExecutor::prepare`] (startup) and
+//! [`ArbitrageTradeExecutor::main_consider_trading`] (every pool update).
 //!
 //! **Single flight:** only one trade runs at a time. Pool updates arrive many
 //! times per second; without this guard the bot could fire a second trade
@@ -15,15 +18,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use solana_message::AddressLookupTableAccount;
 
 use super::assemble_arbitrage_transaction::{
-    FundingSource, TransactionFeeSettings, arbitrage_instructions, compile_and_sign_v0_transaction,
-    decode_address_lookup_table,
+    FundingSource, TransactionFeeSettings, compile_and_sign_v0_transaction,
+    decode_address_lookup_table, main_arbitrage_instructions,
 };
 use super::decide_if_trade_is_worth_it::{
-    ApprovedArbitrageTrade, CacheFreshness, TradeDecisionRules, decide_if_trade_is_worth_it,
+    ApprovedArbitrageTrade, CacheFreshness, TradeDecisionRules, main_decide_if_trade_is_worth_it,
 };
 use super::flash_loan_instructions::{FlashLoanProvider, KaminoFlashLoanAccounts};
 use super::jito_tip_instruction::{default_jito_tip_accounts, pick_tip_account};
-use super::send_and_confirm::{SendingClients, simulate_then_send_if_allowed};
+use super::send_and_confirm::{SendingClients, main_simulate_then_send_if_allowed};
 use super::trading_wallet::TradingWallet;
 use crate::bot_settings::{BotSettingsFromEnvironment, FundingMode};
 use crate::print_logs;
@@ -109,7 +112,7 @@ impl ArbitrageTradeExecutor {
 
     /// Called after every pool update: check both directions and, if one is
     /// approved and no trade is running, start it in the background.
-    pub fn consider_trading(self: &Arc<Self>, cache: &LatestPoolStateCache) {
+    pub fn main_consider_trading(self: &Arc<Self>, cache: &LatestPoolStateCache) {
         let (Some(raydium_pool), Some(orca_pool)) = (
             cache.first_pool_on_dex(DexProgram::RaydiumClmm),
             cache.first_pool_on_dex(DexProgram::OrcaWhirlpool),
@@ -139,7 +142,7 @@ impl ArbitrageTradeExecutor {
         ];
         for (sell_pool, sell_tick_arrays, buy_pool, buy_tick_arrays) in directions {
             let direction_label = format!("{}→{}", sell_pool.dex.name(), buy_pool.dex.name());
-            match decide_if_trade_is_worth_it(
+            match main_decide_if_trade_is_worth_it(
                 sell_pool,
                 sell_tick_arrays,
                 buy_pool,
@@ -197,7 +200,7 @@ impl ArbitrageTradeExecutor {
                 .and_then(|_| pick_tip_account(&self.jito_tip_accounts))
                 .map(|tip_account| (tip_account, self.settings.jito_tip_lamports)),
         };
-        let instructions = arbitrage_instructions(&self.wallet, trade, &funding, &fees);
+        let instructions = main_arbitrage_instructions(&self.wallet, trade, &funding, &fees);
         let transaction = match compile_and_sign_v0_transaction(
             &self.wallet,
             &instructions,
@@ -212,10 +215,11 @@ impl ArbitrageTradeExecutor {
             rpc: &self.rpc,
             jito: self.jito.as_ref(),
         };
-        simulate_then_send_if_allowed(
+        main_simulate_then_send_if_allowed(
             &clients,
             &transaction,
             &self.wallet.address(),
+            self.settings.simulate_on_rpc_before_sending,
             self.settings.send_real_transactions,
         )
         .await;

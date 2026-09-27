@@ -6,14 +6,14 @@
 
 use crate::print_logs;
 use crate::solana_connections::SolanaRpcClient;
-use crate::step_2_decode_account_bytes::decode_tick_array_account;
+use crate::step_2_decode_account_bytes::main_decode_tick_array_account;
 use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, PublicKeyBytes};
 
 /// RPC data has no Geyser write version, so it uses 0 — the oldest possible.
 /// Any real Geyser update for the same account will then always win.
 const WRITE_VERSION_FOR_RPC_LOADED_DATA: u64 = 0;
 
-pub(super) async fn load_tick_arrays_not_yet_streamed(
+pub(crate) async fn load_tick_arrays_not_yet_streamed(
     rpc_client: &SolanaRpcClient,
     cache: &LatestPoolStateCache,
     tick_array_addresses: &[PublicKeyBytes],
@@ -40,7 +40,7 @@ pub(super) async fn load_tick_arrays_not_yet_streamed(
             failed_to_decode_count += 1;
             continue;
         };
-        let Some(tick_array) = decode_tick_array_account(
+        let Some(tick_array) = main_decode_tick_array_account(
             &watched_tick_array,
             &account.account_data,
             account.slot,

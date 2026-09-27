@@ -5,12 +5,12 @@
 
 use solana_clmm_raydium::{InitializedTick as RaydiumInitializedTick, SwapPool, compute_swap_full};
 
-use super::swap_quote_types::{SwapDirection, SwapQuoteForExactInput, WhySwapQuoteFailed};
+use super::super::swap_quote_types::{SwapDirection, SwapQuoteForExactInput, WhySwapQuoteFailed};
 use crate::step_3_store_latest_pool_state::{
     ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks,
 };
 
-pub(super) fn quote_raydium_clmm_swap(
+pub(crate) fn quote_raydium_clmm_swap(
     pool: &ConcentratedLiquidityPoolState,
     cached_tick_arrays: &[TickArrayAccountWithInitializedTicks],
     input_amount: u64,

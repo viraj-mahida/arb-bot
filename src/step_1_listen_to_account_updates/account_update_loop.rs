@@ -1,4 +1,6 @@
-//! The main loop: read the next Geyser message and hand it to the right handler.
+//! **Sub-step 1.1.** The main loop: read the next Geyser message and hand it to the right handler.
+//!
+//! **Start here:** [`main_process_account_updates_forever`].
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -29,7 +31,7 @@ pub(super) struct AccountUpdateListener<'a> {
 }
 
 /// Process Geyser account updates until the stream ends.
-pub async fn process_account_updates_forever(
+pub async fn main_process_account_updates_forever(
     mut account_update_stream: GeyserAccountUpdateStream,
     geyser_subscription_sender: GeyserSubscriptionSender,
     watched_pools: &WatchedPools,
@@ -71,7 +73,7 @@ pub async fn process_account_updates_forever(
 
         if let Some(pool_config) = watched_pools.config_for_pool_address(&account_address) {
             listener
-                .handle_pool_account_update(
+                .main_handle_pool_account_update(
                     pool_config,
                     &account.data,
                     account_update.slot,
@@ -79,7 +81,7 @@ pub async fn process_account_updates_forever(
                 )
                 .await;
         } else if let Some(watched_tick_array) = cache.watched_tick_array(&account_address) {
-            listener.handle_tick_array_account_update(
+            listener.main_handle_tick_array_account_update(
                 &watched_tick_array,
                 &account.data,
                 account_update.slot,
