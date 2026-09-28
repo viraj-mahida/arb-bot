@@ -2,7 +2,7 @@
 //!
 //! **Start here:** [`main_quote_most_profitable_two_pool_round_trip`].
 
-use super::main_find_input_amount_that_maximizes_profit;
+use super::find_input_amount_that_maximizes_profit::main_find_input_amount_that_maximizes_profit;
 use crate::step_3_store_latest_pool_state::{
     ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks,
 };

@@ -1,0 +1,60 @@
+[stderr] INFO:     Started server process [69159]
+[stderr] INFO:     Waiting for application startup.
+[stderr] INFO:     Application startup complete.
+[stderr] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+INFO:     127.0.0.1:63937 - "GET /health HTTP/1.1" 200 OK
+[stderr] INFO:     ('127.0.0.1', 63938) - "WebSocket /ws" [accepted]
+[stderr] 2026-09-28 14:32:33 INFO     [codeboarding_pro.ws.server:258] WebSocket connected: session bc1e434d-1f83-4548-9aac-4e88c9cedde6
+[stderr] INFO:     connection open
+[stderr] 2026-09-28 14:32:34 INFO     [tool_registry.installers:451] Installing Node.js packages: ['pyright@1.1.400', 'typescript-language-server@4.3.4', 'typescript@5.7', 'intelephense@1.16.5']
+[stderr] 2026-09-28 14:32:49 INFO     [tool_registry.installers:465] Node.js packages installed successfully
+[stderr] 2026-09-28 14:35:08 INFO     [tool_registry.installers:268]   tokei: downloaded successfully
+[stderr] 2026-09-28 14:46:24 INFO     [tool_registry.installers:268]   gopls: downloaded successfully
+[stderr] 2026-09-28 14:51:07 INFO     [tool_registry.installers:268]   rust-analyzer: downloaded successfully
+[stderr] 2026-09-28 14:51:07 INFO     [tool_registry.installers:492] Downloading java...
+[stderr] 2026-09-28 14:52:22 INFO     [tool_registry.installers:506] java installed successfully
+[stderr] 2026-09-28 14:52:22 WARNING  [tool_registry.installers:367]   csharp-ls: dotnet not found on PATH; skipping install. Users must install it before running analysis.
+[stderr] 2026-09-28 14:52:22 INFO     [static_analyzer.java_utils:125] Found Java 25 at /Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
+[stderr] 2026-09-28 14:52:22 INFO     [codeboarding_pro.lsp.bootstrap:56] LSP startup attempt 1/3
+[stderr] 2026-09-28 14:52:22 INFO     [codeboarding_pro.session:183] Session bc1e434d-1f83-4548-9aac-4e88c9cedde6 initialized: repo=/Users/viraj/web3/arb-bot, project=arb-bot, output=/Users/viraj/web3/arb-bot/.codeboarding
+[stderr] 2026-09-28 14:52:23 INFO     [static_analyzer.engine.language_adapter:283] Found 62 Rust files in /Users/viraj/web3/arb-bot
+[stderr] 2026-09-28 14:52:23 INFO     [static_analyzer:450] Starting engine LSP client for Rust at /Users/viraj/web3/arb-bot
+[stderr] 2026-09-28 14:52:23 ERROR    [static_analyzer:368] Failed to start engine LSP client for Rust; skipping this language and continuing
+[stderr] Traceback (most recent call last):
+[stderr]   File "static_analyzer/__init__.py", line 366, in start_clients
+[stderr]   File "static_analyzer/__init__.py", line 453, in _spawn_engine_client
+[stderr]   File "static_analyzer/engine/adapters/rust_adapter.py", line 143, in get_lsp_command
+[stderr] RuntimeError: cargo not found on PATH. rust-analyzer requires a Rust toolchain to index Cargo projects. Install one via https://rustup.rs/ and re-run the analysis.
+[stderr] 2026-09-28 14:52:23 WARNING  [codeboarding_pro.lsp.bootstrap:72] LSP startup attempt 1 failed: Failed to start any engine LSP client (attempted: Rust); failures: Rust: cargo not found on PATH. rust-analyzer requires a Rust toolchain to index Cargo projects. Install one via https://rustup.rs/ and re-run the analysis.
+[stderr] Traceback (most recent call last):
+[stderr]   File "codeboarding_pro/lsp/bootstrap.py", line 61, in _run
+[stderr]   File "static_analyzer/__init__.py", line 403, in start_clients
+[stderr] RuntimeError: Failed to start any engine LSP client (attempted: Rust); failures: Rust: cargo not found on PATH. rust-analyzer requires a Rust toolchain to index Cargo projects. Install one via https://rustup.rs/ and re-run the analysis.
+[stderr] 2026-09-28 14:52:26 INFO     [codeboarding_pro.lsp.bootstrap:56] LSP startup attempt 2/3
+[stderr] 2026-09-28 14:52:26 INFO     [static_analyzer.engine.language_adapter:283] Found 62 Rust files in /Users/viraj/web3/arb-bot
+[stderr] 2026-09-28 14:52:26 INFO     [static_analyzer:450] Starting engine LSP client for Rust at /Users/viraj/web3/arb-bot
+[stderr] 2026-09-28 14:52:26 ERROR    [static_analyzer:368] Failed to start engine LSP client for Rust; skipping this language and continuing
+[stderr] Traceback (most recent call last):
+[stderr]   File "static_analyzer/__init__.py", line 366, in start_clients
+[stderr]   File "static_analyzer/__init__.py", line 453, in _spawn_engine_client
+[stderr]   File "static_analyzer/engine/adapters/rust_adapter.py", line 143, in get_lsp_command
+[stderr] RuntimeError: cargo not found on PATH. rust-analyzer requires a Rust toolchain to index Cargo projects. Install one via https://rustup.rs/ and re-run the analysis.
+[stderr] 2026-09-28 14:52:26 WARNING  [codeboarding_pro.lsp.bootstrap:72] LSP startup attempt 2 failed: Failed to start any engine LSP client (attempted: Rust); failures: Rust: cargo not found on PATH. rust-analyzer requires a Rust toolchain to index Cargo projects. Install one via https://rustup.rs/ and re-run the analysis.
+[stderr] Traceback (most recent call last):
+[stderr]   File "codeboarding_pro/lsp/bootstrap.py", line 61, in _run
+[stderr]   File "static_analyzer/__init__.py", line 403, in start_clients
+[stderr] RuntimeError: Failed to start any engine LSP client (attempted: Rust); failures: Rust: cargo not found on PATH. rust-analyzer requires a Rust toolchain to index Cargo projects. Install one via https://rustup.rs/ and re-run the analysis.
+[stderr] 2026-09-28 14:52:29 INFO     [codeboarding_pro.lsp.bootstrap:56] LSP startup attempt 3/3
+[stderr] 2026-09-28 14:52:29 INFO     [static_analyzer.engine.language_adapter:283] Found 62 Rust files in /Users/viraj/web3/arb-bot
+[stderr] 2026-09-28 14:52:29 INFO     [static_analyzer:450] Starting engine LSP client for Rust at /Users/viraj/web3/arb-bot
+[stderr] 2026-09-28 14:52:29 ERROR    [static_analyzer:368] Failed to start engine LSP client for Rust; skipping this language and continuing
+[stderr] Traceback (most recent call last):
+[stderr]   File "static_analyzer/__init__.py", line 366, in start_clients
+[stderr]   File "static_analyzer/__init__.py", line 453, in _spawn_engine_client
+[stderr]   File "static_analyzer/engine/adapters/rust_adapter.py", line 143, in get_lsp_command
+[stderr] RuntimeError: cargo not found on PATH. rust-analyzer requires a Rust toolchain to index Cargo projects. Install one via https://rustup.rs/ and re-run the analysis.
+[stderr] 2026-09-28 14:52:29 WARNING  [codeboarding_pro.lsp.bootstrap:72] LSP startup attempt 3 failed: Failed to start any engine LSP client (attempted: Rust); failures: Rust: cargo not found on PATH. rust-analyzer requires a Rust toolchain to index Cargo projects. Install one via https://rustup.rs/ and re-run the analysis.
+[stderr] Traceback (most recent call last):
+[stderr]   File "codeboarding_pro/lsp/bootstrap.py", line 61, in _run
+[stderr]   File "static_analyzer/__init__.py", line 403, in start_clients
+[stderr] RuntimeError: Failed to start any engine LSP client (attempted: Rust); failures: Rust: cargo not found on PATH. rust-analyzer requires a Rust toolchain to index Cargo projects. Install one via https://rustup.rs/ and re-run the analysis.

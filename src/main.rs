@@ -86,7 +86,7 @@ async fn main() {
         .install_default()
         .expect("failed to install rustls crypto provider");
 
-    // Load RPC_URL, GRPC_URL, and X_TOKEN from a local `.env` file if present.
+    // Load environment variables from a local `.env` file if present.
     dotenvy::dotenv().ok();
     print_logs::start_copying_to_file();
 

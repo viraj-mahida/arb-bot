@@ -16,8 +16,9 @@
 //!    ([`jito_tip_instruction`]).
 //! 4. **Assemble and sign** a v0 transaction
 //!    ([`assemble_arbitrage_transaction`]).
-//! 5. **Simulate, then send** ([`send_and_confirm`]): always dry-run first;
-//!    only send when `SEND_TRANSACTIONS=true`.
+//! 5. **Simulate, then send** ([`send_and_confirm`]): dry-run on the RPC node
+//!    only when `RPC_SIMULATION=true` (off by default); only send when
+//!    `SEND_TRANSACTIONS=true`.
 //!
 //! [`arbitrage_trade_executor`] ties these together and makes sure only one
 //! trade is in flight at a time.
