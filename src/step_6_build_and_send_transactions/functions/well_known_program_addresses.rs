@@ -29,6 +29,10 @@ pub const COMPUTE_BUDGET_PROGRAM_ADDRESS: &str = "ComputeBudget11111111111111111
 pub const INSTRUCTIONS_SYSVAR_ADDRESS: &str = "Sysvar1nstructions1111111111111111111111111";
 /// The wrapped-SOL mint: SOL dressed up as an SPL token so DEXes can treat it like any other token.
 pub const WRAPPED_SOL_MINT_ADDRESS: &str = "So11111111111111111111111111111111111111112";
+/// Jupiter Lend flash-loan program (borrow/payback, checked through the instructions sysvar).
+pub const JUPITER_FLASHLOAN_PROGRAM_ADDRESS: &str = "jupgfSgfuAXv4B6R2Uxu85Z1qdzgju79s6MfZekN6XS";
+/// Jupiter Lend liquidity layer: owns the vaults the flash loan draws from.
+pub const JUPITER_LIQUIDITY_PROGRAM_ADDRESS: &str = "jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC";
 /// Kamino Lend program (flash loans).
 pub const KAMINO_LEND_PROGRAM_ADDRESS: &str = "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD";
 

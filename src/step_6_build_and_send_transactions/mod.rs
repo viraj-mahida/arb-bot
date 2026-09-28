@@ -42,6 +42,7 @@ pub mod functions;
 
 pub mod arbitrage_trade_executor;
 pub mod assemble_arbitrage_transaction;
+pub mod create_lookup_table;
 pub mod decide_if_trade_is_worth_it;
 pub mod send_and_confirm;
 

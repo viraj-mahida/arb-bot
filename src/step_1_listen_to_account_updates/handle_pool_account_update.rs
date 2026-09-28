@@ -33,8 +33,12 @@ impl AccountUpdateListener<'_> {
         };
         apply_raydium_fee_from_fee_config(self.rpc_client, self.cache, &mut pool_state).await;
 
+        let previous_pool = self.cache.pool_state_by_address(&pool_state.pool_address);
         let tick_arrays_near_price = tick_array_pdas_near_current_price(&pool_state);
         self.cache.save_pool_state(pool_state.clone());
+        // Visitors and the LP whale follow the real price. The log line below
+        // uses the demo-shifted copy, matching the spread and the quote.
+        crate::dashboard_events::note_pool_change(previous_pool.as_ref(), &pool_state);
         let newly_watched_tick_arrays = self
             .cache
             .start_watching_tick_arrays(&tick_arrays_near_price);
@@ -46,7 +50,7 @@ impl AccountUpdateListener<'_> {
             .cache
             .watched_tick_array_count_for_pool(&pool_state.pool_address);
         print_logs::pool_account_updated(
-            &pool_state,
+            &crate::dashboard_events::with_demo_price_shift(pool_state.clone()),
             loaded_tick_array_count,
             watched_tick_array_count,
         );

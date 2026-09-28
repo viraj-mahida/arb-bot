@@ -1,3 +1,6 @@
 .env
 /target
 /logs/
+bot-keypair.json
+dashboard/node_modules/
+dashboard/dist/

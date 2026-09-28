@@ -110,6 +110,12 @@ impl SolanaRpcClient {
         Ok(result.value.blockhash)
     }
 
+    /// Current slot at `confirmed` commitment (lookup-table creation needs a recent one).
+    pub async fn get_slot(&self) -> Result<u64, String> {
+        self.call("getSlot", serde_json::json!([{ "commitment": "confirmed" }]))
+            .await
+    }
+
     /// SOL balance of an address, in lamports.
     pub async fn get_balance(&self, address: &PublicKeyBytes) -> Result<u64, String> {
         let result: ValueWithContext<u64> = self

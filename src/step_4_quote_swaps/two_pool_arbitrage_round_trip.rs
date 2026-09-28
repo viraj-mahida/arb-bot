@@ -60,6 +60,7 @@ impl CachedPoolWithTickArrays {
         cache: &LatestPoolStateCache,
         pool: ConcentratedLiquidityPoolState,
     ) -> Self {
+        let pool = crate::dashboard_events::with_demo_price_shift(pool);
         Self {
             tick_arrays: cache.tick_arrays_for_pool(&pool.pool_address),
             pool,

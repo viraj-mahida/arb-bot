@@ -20,7 +20,8 @@ use crate::step_6_build_and_send_transactions::decide_if_trade_is_worth_it::{
     main_decide_if_trade_is_worth_it,
 };
 use crate::step_6_build_and_send_transactions::flash_loan_instructions::{
-    FlashLoanProvider, KaminoFlashLoanAccounts,
+    FlashLoanProvider, JUPITER_BORROW_DISCRIMINATOR, JUPITER_PAYBACK_DISCRIMINATOR,
+    JupiterFlashLoanAccounts, KaminoFlashLoanAccounts,
 };
 use crate::step_6_build_and_send_transactions::orca_whirlpool_swap_instruction::orca_oracle_address;
 use crate::step_6_build_and_send_transactions::swap_leg_instruction::{
@@ -29,7 +30,7 @@ use crate::step_6_build_and_send_transactions::swap_leg_instruction::{
 use crate::step_6_build_and_send_transactions::trading_wallet::TradingWallet;
 use crate::step_6_build_and_send_transactions::well_known_program_addresses::{
     ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ADDRESS, COMPUTE_BUDGET_PROGRAM_ADDRESS,
-    KAMINO_LEND_PROGRAM_ADDRESS, SYSTEM_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS,
+    JUPITER_FLASHLOAN_PROGRAM_ADDRESS, KAMINO_LEND_PROGRAM_ADDRESS, SYSTEM_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS,
     WRAPPED_SOL_MINT_ADDRESS, program,
 };
 
@@ -43,7 +44,7 @@ fn test_rules() -> TradeDecisionRules {
         compute_unit_limit: 400_000,
         priority_fee_micro_lamports_per_compute_unit: 10_000,
         jito_tip_lamports: 10_000,
-        flash_loan_fee_in_basis_points: 10,
+        flash_loan_fee_in_basis_points: 1,
     }
 }
 
@@ -92,8 +93,8 @@ fn transaction_costs_add_signature_priority_tip_and_flash_fees() {
     assert_eq!(costs.network_signature_fee, 5_000);
     assert_eq!(costs.priority_fee, 4_000); // 400,000 CU × 10,000 µlamports / 1,000,000
     assert_eq!(costs.jito_tip, 10_000);
-    assert_eq!(costs.flash_loan_fee, 1_000_000); // 10 bps of 1 SOL
-    assert_eq!(costs.total(), 1_019_000);
+    assert_eq!(costs.flash_loan_fee, 100_000); // 1 bp of 1 SOL
+    assert_eq!(costs.total(), 119_000);
 
     let jito_route = costs_of_primary_send_route(&test_rules(), 1_000_000_000);
     assert_eq!(jito_route.priority_fee, 0);
@@ -178,6 +179,8 @@ fn approved_trade_is_capped_and_guarded_by_minimum_output() {
     let rules = test_rules();
     let trade = profitable_trade(&rules);
     assert!(trade.size_was_capped);
+    assert!(trade.best_size_lamports > trade.start_token_amount_in);
+    assert!(trade.best_size_pool_profit_lamports > 0);
     assert_eq!(trade.start_token_amount_in, rules.max_trade_input_lamports);
     assert_eq!(
         trade.leg_2_bridge_token_amount_in,
@@ -338,6 +341,52 @@ fn flash_loan_transaction_borrows_first_and_repays_after_both_legs() {
     assert_eq!(
         &repay.data[8..16],
         &trade.start_token_amount_in.to_le_bytes()
+    );
+}
+
+fn jupiter_admin_bytes(status: u8, fee: u16) -> Vec<u8> {
+    let mut data = vec![0u8; 100];
+    data[72] = status;
+    data[73..75].copy_from_slice(&fee.to_le_bytes());
+    data
+}
+
+/// Jupiter: borrow first, payback last, both carrying the amount (payback includes the fee).
+#[test]
+fn jupiter_flash_loan_transaction_borrows_first_and_repays_with_fee() {
+    let trade = profitable_trade(&test_rules());
+    let wallet = TradingWallet::from_keypair(Keypair::new());
+    let accounts = JupiterFlashLoanAccounts::from_admin_account_bytes(&jupiter_admin_bytes(1, 5))
+        .unwrap();
+    let provider = FlashLoanProvider::Jupiter(accounts);
+    let fees = TransactionFeeSettings {
+        compute_unit_limit: 400_000,
+        priority_fee_micro_lamports_per_compute_unit: 10_000,
+        jito_tip: None,
+    };
+    let instructions =
+        main_arbitrage_instructions(&wallet, &trade, &FundingSource::FlashLoan(&provider), &fees);
+    let borrow = &instructions[4];
+    let repay = &instructions[7];
+    assert_eq!(borrow.program_id, program(JUPITER_FLASHLOAN_PROGRAM_ADDRESS));
+    assert_eq!(repay.program_id, program(JUPITER_FLASHLOAN_PROGRAM_ADDRESS));
+    assert_eq!(borrow.accounts.len(), 14);
+    assert_eq!(&borrow.data[..8], &JUPITER_BORROW_DISCRIMINATOR);
+    assert_eq!(&repay.data[..8], &JUPITER_PAYBACK_DISCRIMINATOR);
+    assert_eq!(&borrow.data[8..16], &trade.start_token_amount_in.to_le_bytes());
+    let owed = trade.start_token_amount_in
+        + (u128::from(trade.start_token_amount_in) * 5).div_ceil(10_000) as u64;
+    assert_eq!(&repay.data[8..16], &owed.to_le_bytes());
+}
+
+#[test]
+fn jupiter_admin_account_fee_is_read_and_pause_is_refused() {
+    let accounts = JupiterFlashLoanAccounts::from_admin_account_bytes(&jupiter_admin_bytes(1, 0))
+        .unwrap();
+    assert_eq!(accounts.fee_in_basis_points, 0);
+    assert_eq!(accounts.amount_to_repay(1_000_000_000), 1_000_000_000);
+    assert!(
+        JupiterFlashLoanAccounts::from_admin_account_bytes(&jupiter_admin_bytes(0, 0)).is_err()
     );
 }
 

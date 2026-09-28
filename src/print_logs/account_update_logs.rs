@@ -4,6 +4,7 @@ use crate::step_3_store_latest_pool_state::{
     ConcentratedLiquidityPoolState, DexProgram, PublicKeyBytes,
     TickArrayAccountWithInitializedTicks, encode_public_key_as_base58, shorten_public_key_for_logs,
 };
+use crate::step_4_quote_swaps::pool_label;
 
 pub fn pool_account_updated(
     pool: &ConcentratedLiquidityPoolState,
@@ -11,13 +12,27 @@ pub fn pool_account_updated(
     watched_tick_array_count: usize,
 ) {
     log_line!(
-        "[pool]    {:<14}  price {:.4} USDC/SOL  tick {}  slot {}  tick arrays loaded {}/{}",
-        pool.dex.name(),
+        "[pool]    {:<22}  price {:.4} USDC/SOL  tick {}  slot {}  tick arrays loaded {}/{}",
+        pool_label(pool),
         pool.human_readable_price_token_b_per_token_a(),
         pool.current_tick_index,
         pool.slot,
         loaded_tick_array_count,
         watched_tick_array_count,
+    );
+    crate::dashboard_events::geyser(
+        pool.slot,
+        pool.dex.name(),
+        "pool",
+        &format!(
+            "POOL {}  {:.0}bp  price {:.4}  tick {}  liq {}  slot {}",
+            pool_label(pool),
+            f64::from(pool.fee_rate_in_millionths) / 100.0,
+            pool.human_readable_price_token_b_per_token_a(),
+            pool.current_tick_index,
+            pool.active_liquidity_at_current_price,
+            pool.slot,
+        ),
     );
 }
 
@@ -30,6 +45,31 @@ pub fn starting_to_watch_tick_arrays(dex: DexProgram, new_tick_array_count: usiz
 
 /// Tick arrays are rewritten almost every slot, so these lines only appear with `LOG_VERBOSE=true`.
 pub fn tick_array_account_updated(tick_array: &TickArrayAccountWithInitializedTicks) {
+    let pool_address = encode_public_key_as_base58(&tick_array.pool_address);
+    let pool = format!(
+        "{}:{}",
+        tick_array.dex.name(),
+        &pool_address[..4.min(pool_address.len())]
+    );
+    crate::dashboard_events::liquidity_touch(
+        tick_array.dex.name(),
+        &pool,
+        tick_array.slot,
+        tick_array.initialized_ticks.len(),
+        tick_array.start_tick_index,
+    );
+    crate::dashboard_events::geyser(
+        tick_array.slot,
+        tick_array.dex.name(),
+        "tickArray",
+        &format!(
+            "TICKS {}  start {}  initialized {}  slot {}",
+            tick_array.dex.name(),
+            tick_array.start_tick_index,
+            tick_array.initialized_ticks.len(),
+            tick_array.slot,
+        ),
+    );
     if !super::output::verbose() {
         return;
     }

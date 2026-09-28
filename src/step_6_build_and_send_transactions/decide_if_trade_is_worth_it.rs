@@ -50,6 +50,9 @@ pub fn main_decide_if_trade_is_worth_it(
         buy_pool,
         buy_pool_tick_arrays,
     )?;
+    // Kept after the cap re-quote so a send log can still show the size Step 5 picked.
+    let best_size_lamports = round_trip.start_token_amount_in;
+    let best_size_pool_profit_lamports = round_trip.profit_in_start_token();
     let size_was_capped = round_trip.start_token_amount_in > rules.max_trade_input_lamports;
     if size_was_capped {
         // Profit is a hill in trade size (Step 5), so a smaller size is still
@@ -111,6 +114,8 @@ pub fn main_decide_if_trade_is_worth_it(
         expected_start_token_out,
         costs,
         expected_profit_after_costs,
+        best_size_lamports,
+        best_size_pool_profit_lamports,
         size_was_capped,
     })
 }
@@ -257,6 +262,10 @@ pub struct ApprovedArbitrageTrade {
     pub costs: EstimatedTransactionCosts,
     /// `expected_start_token_out - start_token_amount_in - costs` (lamports).
     pub expected_profit_after_costs: i128,
+    /// SOL (lamports) Step 5 picked, before `MAX_TRADE_INPUT_LAMPORTS` shrunk the trade.
+    pub best_size_lamports: u64,
+    /// Pool profit at `best_size_lamports`: SOL out minus SOL in, before signature, tip, and flash fee.
+    pub best_size_pool_profit_lamports: i128,
     /// `true` when the best size was larger than `MAX_TRADE_INPUT_LAMPORTS` and got capped.
     pub size_was_capped: bool,
 }

@@ -9,6 +9,9 @@ pub fn pool_snapshot(cache: &LatestPoolStateCache, updated_pool_address: &Public
     let Some(updated_pool) = cache.pool_state_by_address(updated_pool_address) else {
         return;
     };
+    // Demo mode shifts Orca on the copy used for the spread line and the
+    // dashboard boards. The cache itself is unchanged.
+    let updated_pool = crate::dashboard_events::with_demo_price_shift(updated_pool);
     let other_pools = cache.other_pools_with_same_mint_pair(updated_pool_address);
     if other_pools.is_empty() {
         log_line!(
@@ -17,8 +20,9 @@ pub fn pool_snapshot(cache: &LatestPoolStateCache, updated_pool_address: &Public
         );
         return;
     }
-    for other_pool in &other_pools {
-        print_spread(&updated_pool, other_pool);
+    for other_pool in other_pools {
+        let other_pool = crate::dashboard_events::with_demo_price_shift(other_pool);
+        print_spread(&updated_pool, &other_pool);
     }
 }
 
@@ -52,6 +56,13 @@ fn print_spread(
         pool_label(pool),
         pool_label(other_pool),
         pool_label(higher_pool),
+    );
+    crate::dashboard_events::boards(
+        pool,
+        other_pool,
+        gap_in_basis_points,
+        fees_in_basis_points,
+        gap_in_basis_points > fees_in_basis_points,
     );
 }
 

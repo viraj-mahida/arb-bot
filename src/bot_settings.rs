@@ -10,7 +10,7 @@
 //! | Variable                            | Default                                 | Meaning |
 //! |-------------------------------------|-----------------------------------------|---------|
 //! | `WALLET_KEYPAIR_PATH`               | *(none → trading disabled)*             | JSON keypair file (same format as `solana-keygen`) |
-//! | `FUNDING_MODE`                      | `wallet`                                | `wallet` = trade your own SOL, `flash_loan` = borrow it from Kamino |
+//! | `FUNDING_MODE`                      | `wallet`                                | `wallet` = trade your own SOL, `flash_loan` = borrow it (Jupiter Lend or Kamino) |
 //! | `SEND_TRANSACTIONS`                 | `false`                                 | `false` = simulate only, `true` = really send |
 //! | `RPC_SIMULATION`                    | `false`                                 | `true` = dry-run on the RPC node before sending (adds a round trip) |
 //! | `MAX_TRADE_INPUT_LAMPORTS`          | `1000000000` (1 SOL)                    | Largest start amount ever put into leg 1 |
@@ -22,9 +22,10 @@
 //! | `MAX_STATE_AGE_SLOTS`               | `150`                                   | Pool state older than this (vs newest slot seen) is stale |
 //! | `MAX_STREAM_SILENCE_MS`             | `2000`                                  | If Geyser has been silent this long, all state is stale |
 //! | `SLIPPAGE_TOLERANCE_BPS`            | `0`                                     | How much less bridge token leg 1 may return (1 bp = 0.01%) |
-//! | `KAMINO_LENDING_MARKET`             | *(required for `flash_loan`)*           | Kamino lending market that owns the reserve |
-//! | `KAMINO_SOL_RESERVE`                | *(required for `flash_loan`)*           | Kamino reserve that lends wrapped SOL |
-//! | `FLASH_LOAN_FEE_BPS`                | `10`                                    | Flash-loan fee used in the cost estimate; check the reserve's config |
+//! | `FLASH_LOAN_PROVIDER`               | `jupiter`                               | `jupiter` or `kamino` (only when `FUNDING_MODE=flash_loan`) |
+//! | `KAMINO_LENDING_MARKET`             | *(required for `kamino`)*               | Kamino lending market that owns the reserve |
+//! | `KAMINO_SOL_RESERVE`                | *(required for `kamino`)*               | Kamino reserve that lends wrapped SOL |
+//! | `FLASH_LOAN_FEE_BPS`                | `0` jupiter, `1` kamino                 | Flash-loan fee used in the cost estimate; Jupiter's live fee is checked against it at startup |
 //! | `ADDRESS_LOOKUP_TABLES`             | *(empty)*                               | Comma-separated lookup-table addresses to shrink transactions |
 
 use crate::step_3_store_latest_pool_state::{PublicKeyBytes, parse_base58_public_key};
@@ -38,20 +39,36 @@ pub enum FundingMode {
     /// Borrow wrapped SOL from a lending protocol at the start of the
     /// transaction and repay it (plus a small fee) at the end. If the repay
     /// fails, the whole transaction reverts, so the lender never takes risk.
-    FlashLoan(KaminoFlashLoanSettings),
+    FlashLoan(FlashLoanSettings),
 }
 
-/// Which Kamino lending reserve to flash-borrow from.
-///
-/// **What Kamino is:** a lending protocol on Solana. Each *reserve* is a pool
-/// of one token that lenders deposit into; each *lending market* groups reserves.
+/// Which lender a flash loan comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct KaminoFlashLoanSettings {
-    pub lending_market_address: PublicKeyBytes,
-    pub sol_reserve_address: PublicKeyBytes,
-    /// Fee in basis points. Only used to *estimate* costs; the program charges
-    /// its own configured fee, and the leg-2 minimum output protects us either way.
+pub enum FlashLoanLender {
+    /// Jupiter Lend: accounts are derived from seeds; nothing to configure.
+    Jupiter,
+    /// Kamino: a lending protocol whose *reserves* (one per token) sit in a *lending market*.
+    Kamino {
+        lending_market_address: PublicKeyBytes,
+        sol_reserve_address: PublicKeyBytes,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlashLoanSettings {
+    pub lender: FlashLoanLender,
+    /// Fee in basis points used to *estimate* costs. For Jupiter the bot reads
+    /// the live fee at startup and refuses to start if it is higher than this.
     pub flash_loan_fee_in_basis_points: u64,
+}
+
+impl FlashLoanSettings {
+    pub fn lender_name(&self) -> &'static str {
+        match self.lender {
+            FlashLoanLender::Jupiter => "Jupiter Lend flash loan",
+            FlashLoanLender::Kamino { .. } => "Kamino flash loan",
+        }
+    }
 }
 
 /// All trading settings, read once at startup.
@@ -79,11 +96,22 @@ impl BotSettingsFromEnvironment {
     pub fn from_env() -> Self {
         let funding_mode = match read_text("FUNDING_MODE").as_deref() {
             None | Some("wallet") => FundingMode::OwnWallet,
-            Some("flash_loan") => FundingMode::FlashLoan(KaminoFlashLoanSettings {
-                lending_market_address: read_required_public_key("KAMINO_LENDING_MARKET"),
-                sol_reserve_address: read_required_public_key("KAMINO_SOL_RESERVE"),
-                flash_loan_fee_in_basis_points: read_number("FLASH_LOAN_FEE_BPS", 10),
-            }),
+            Some("flash_loan") => match read_text("FLASH_LOAN_PROVIDER").as_deref() {
+                None | Some("jupiter") => FundingMode::FlashLoan(FlashLoanSettings {
+                    lender: FlashLoanLender::Jupiter,
+                    flash_loan_fee_in_basis_points: read_number("FLASH_LOAN_FEE_BPS", 0),
+                }),
+                Some("kamino") => FundingMode::FlashLoan(FlashLoanSettings {
+                    lender: FlashLoanLender::Kamino {
+                        lending_market_address: read_required_public_key("KAMINO_LENDING_MARKET"),
+                        sol_reserve_address: read_required_public_key("KAMINO_SOL_RESERVE"),
+                    },
+                    flash_loan_fee_in_basis_points: read_number("FLASH_LOAN_FEE_BPS", 1),
+                }),
+                Some(other) => {
+                    panic!("FLASH_LOAN_PROVIDER must be 'jupiter' or 'kamino', got '{other}'")
+                }
+            },
             Some(other) => panic!("FUNDING_MODE must be 'wallet' or 'flash_loan', got '{other}'"),
         };
         Self {
@@ -123,7 +151,7 @@ impl BotSettingsFromEnvironment {
     pub fn flash_loan_fee_in_basis_points(&self) -> u64 {
         match &self.funding_mode {
             FundingMode::OwnWallet => 0,
-            FundingMode::FlashLoan(kamino) => kamino.flash_loan_fee_in_basis_points,
+            FundingMode::FlashLoan(flash) => flash.flash_loan_fee_in_basis_points,
         }
     }
 }

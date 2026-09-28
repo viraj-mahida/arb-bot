@@ -47,4 +47,13 @@ fn print_successful_round_trip(
         round_trip.bridge_token_amount_between_legs as f64 / MICRO_USDC_PER_USDC,
         round_trip.start_token_amount_out as f64 / LAMPORTS_PER_SOL,
     );
+    crate::dashboard_events::quote(
+        direction_label,
+        round_trip.start_token_amount_in as f64 / LAMPORTS_PER_SOL,
+        round_trip.bridge_token_amount_between_legs as f64 / MICRO_USDC_PER_USDC,
+        round_trip.start_token_amount_out as f64 / LAMPORTS_PER_SOL,
+        profit_in_sol,
+        round_trip.profit_in_start_token() > 0,
+        !round_trip.both_swaps_fully_filled,
+    );
 }

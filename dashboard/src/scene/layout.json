@@ -1,0 +1,25 @@
+{
+  "spots": {
+    "terminal": { "x": 240, "y": 800 },
+    "screen": { "x": 790, "y": 760 },
+    "orca": { "x": 590, "y": 710 },
+    "raydium": { "x": 1010, "y": 710 },
+    "bank": { "x": 1410, "y": 660 },
+    "locker": { "x": 1388, "y": 875 },
+    "laptop": { "x": 790, "y": 772 },
+    "jito": { "x": 270, "y": 870 },
+    "entrance": { "x": 360, "y": 860 }
+  },
+  "props": [
+    { "id": "terminal", "src": "/assets/prop-terminal.png?v=5", "x": 60, "y": 70, "w": 410, "h": 410, "label": "GEYSER", "labelY": 448 },
+    { "id": "orca", "src": "/assets/prop-desk-orca.png?v=3", "x": 390, "y": 430, "w": 400, "h": 220, "label": "ORCA" },
+    { "id": "raydium", "src": "/assets/prop-desk-raydium.png?v=3", "x": 810, "y": 430, "w": 400, "h": 220, "label": "RAYDIUM" },
+    { "id": "bank", "src": "/assets/prop-bank.png?v=3", "x": 1320, "y": 420, "w": 180, "h": 210, "label": "FLASH BANK" },
+    { "id": "jito", "src": "/assets/prop-mailbox.png?v=3", "x": 108, "y": 598, "w": 276, "h": 258, "label": "JITO/RPC" },
+    { "id": "locker", "src": "/assets/prop-locker.png?v=3", "x": 1360, "y": 660, "w": 170, "h": 180, "label": "WALLET" }
+  ],
+  "wallScreen": { "x": 652, "y": 84, "w": 640, "h": 268 },
+  "terminalScreen": { "x": 220, "y": 300, "w": 127, "h": 102 },
+  "lockerReadout": { "x": 1390, "y": 728, "w": 110 },
+  "laptop": { "x": 625, "y": 774, "w": 330, "h": 124 }
+}

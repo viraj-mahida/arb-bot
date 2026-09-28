@@ -2,6 +2,7 @@
 
 use crate::bot_settings::{BotSettingsFromEnvironment, FundingMode};
 use crate::step_3_store_latest_pool_state::{PublicKeyBytes, encode_public_key_as_base58};
+use crate::step_4_quote_swaps::pool_label;
 use crate::step_6_build_and_send_transactions::{ApprovedArbitrageTrade, WhyTradeWasSkipped};
 
 const LAMPORTS_PER_SOL: f64 = 1e9;
@@ -21,9 +22,9 @@ pub fn trading_ready(
     wallet: &PublicKeyBytes,
     lookup_table_count: usize,
 ) {
-    let funding = match settings.funding_mode {
+    let funding = match &settings.funding_mode {
         FundingMode::OwnWallet => "own wallet SOL",
-        FundingMode::FlashLoan(_) => "Kamino flash loan",
+        FundingMode::FlashLoan(flash) => flash.lender_name(),
     };
     let mode = if settings.send_real_transactions {
         "LIVE — real transactions"
@@ -46,11 +47,35 @@ pub fn trading_ready(
             .as_deref()
             .unwrap_or("RPC (no Jito)"),
     );
+    let funding = match settings.funding_mode {
+        FundingMode::OwnWallet => "wallet",
+        FundingMode::FlashLoan(_) => "flash_loan",
+    };
+    crate::dashboard_events::status(
+        settings.send_real_transactions,
+        settings.simulate_on_rpc_before_sending,
+        funding,
+        Some(&encode_public_key_as_base58(wallet)),
+        None,
+    );
+}
+
+pub fn wallet_balance(lamports: u64) {
+    log_line!(
+        "[trade] wallet balance {:.4} SOL",
+        lamports as f64 / LAMPORTS_PER_SOL
+    );
+    crate::dashboard_events::wallet_sol(lamports as f64 / LAMPORTS_PER_SOL);
+}
+
+pub fn wallet_balance_unreadable() {
+    log_line!("[trade] could not read the wallet balance");
 }
 
 /// Only reasons worth attention are printed; "not profitable" is the normal
 /// case and already visible in the `[best size]` lines.
 pub fn trade_skipped(direction_label: &str, reason: &WhyTradeWasSkipped) {
+    crate::dashboard_events::skip(direction_label, &reason.to_string());
     if matches!(
         reason,
         WhyTradeWasSkipped::NotProfitableAfterCosts { .. } | WhyTradeWasSkipped::QuoteFailed(_)
@@ -68,8 +93,8 @@ pub fn trade_approved(trade: &ApprovedArbitrageTrade) {
     };
     log_line!(
         "[decide]  {}→{}  TRADE  in {:.4} SOL  expected out {:.6} SOL  costs {:.6} SOL (fee {} + priority {} + tip {} + flash {} lamports)  net {:+.6} SOL{capped_note}",
-        trade.sell_pool.dex.name(),
-        trade.buy_pool.dex.name(),
+        pool_label(&trade.sell_pool),
+        pool_label(&trade.buy_pool),
         sol(trade.start_token_amount_in as f64),
         sol(trade.expected_start_token_out as f64),
         sol(trade.costs.total() as f64),
@@ -78,6 +103,39 @@ pub fn trade_approved(trade: &ApprovedArbitrageTrade) {
         trade.costs.jito_tip,
         trade.costs.flash_loan_fee,
         trade.expected_profit_after_costs as f64 / LAMPORTS_PER_SOL,
+    );
+    let flash_loan = trade.costs.flash_loan_fee > 0;
+    let sell = pool_label(&trade.sell_pool);
+    let buy = pool_label(&trade.buy_pool);
+    let instructions = [
+        "set compute budget".to_string(),
+        if flash_loan {
+            "borrow SOL from the bank".to_string()
+        } else {
+            "open the locker and wrap SOL".to_string()
+        },
+        format!("sell SOL at {sell}"),
+        format!("buy SOL at {buy}"),
+        if flash_loan {
+            "repay the bank".to_string()
+        } else {
+            "unwrap SOL back into the locker".to_string()
+        },
+        "post the signed envelope (Jito tip)".to_string(),
+    ];
+    crate::dashboard_events::approved(
+        &format!("{sell}→{buy}"),
+        &sell,
+        &buy,
+        sol(trade.start_token_amount_in as f64),
+        sol(trade.expected_start_token_out as f64),
+        trade.expected_profit_after_costs as f64 / LAMPORTS_PER_SOL,
+        trade.costs.network_signature_fee,
+        trade.costs.priority_fee,
+        trade.costs.jito_tip,
+        trade.costs.flash_loan_fee,
+        trade.size_was_capped,
+        &instructions,
     );
 }
 
@@ -97,10 +155,17 @@ pub fn simulation_succeeded(compute_units: Option<u64>, wallet_lamports_change: 
     log_line!(
         "[simulate] ok  compute units {units}  wallet SOL change {change} (network fee may be excluded)"
     );
+    crate::dashboard_events::simulation(
+        true,
+        compute_units,
+        wallet_lamports_change.map(|change| change as f64 / LAMPORTS_PER_SOL),
+        None,
+    );
 }
 
 pub fn simulation_failed(error: &str, logs: &[String]) {
     log_line!("[simulate] FAILED: {error}");
+    crate::dashboard_events::simulation(false, None, None, Some(error));
     for line in logs.iter().rev().take(SIMULATION_LOG_LINES_TO_SHOW).rev() {
         log_line!("[simulate]   {line}");
     }
@@ -108,31 +173,126 @@ pub fn simulation_failed(error: &str, logs: &[String]) {
 
 pub fn simulation_request_failed(error: &str) {
     log_line!("[simulate] request failed: {error}");
+    crate::dashboard_events::simulation(false, None, None, Some(error));
 }
 
-pub fn send_skipped_simulate_only() {
-    log_line!("[send] skipped: SEND_TRANSACTIONS=false (dry-run mode)");
+pub fn send_skipped_simulate_only(trade: &ApprovedArbitrageTrade) {
+    send_block(
+        "skipped: SEND_TRANSACTIONS=false (dry-run mode)",
+        trade,
+        &[],
+    );
+    crate::dashboard_events::send_skipped();
 }
 
-pub fn sent(route: &str, signature: &str) {
-    log_line!("[send] submitted via {route}  signature {signature}");
+pub fn sent(route: &str, signature: &str, trade: &ApprovedArbitrageTrade) {
+    send_block(
+        &format!("submitted via {route}"),
+        trade,
+        &[format!("signature {signature}")],
+    );
+    crate::dashboard_events::sent(route, signature);
 }
 
-pub fn send_failed(route: &str, error: &str) {
-    log_line!("[send] {route} failed: {error}");
+pub fn send_failed(
+    route: &str,
+    error: &str,
+    trade: &ApprovedArbitrageTrade,
+    signature: Option<&str>,
+) {
+    let mut details = vec![format!("error: {error}")];
+    if let Some(signature) = signature {
+        details.push(format!("signature {signature}"));
+    }
+    send_block(&format!("{route} failed"), trade, &details);
 }
 
-pub fn transaction_landed(signature: &str, wallet_lamports_change: Option<i128>) {
+pub fn transaction_landed(
+    signature: &str,
+    wallet_lamports_change: Option<i128>,
+    trade: &ApprovedArbitrageTrade,
+) {
     let change = wallet_lamports_change.map_or("?".to_string(), |change| {
         format!("{:+.6} SOL", change as f64 / LAMPORTS_PER_SOL)
     });
-    log_line!("[send] CONFIRMED {signature}  wallet SOL change {change}");
+    send_block(
+        "CONFIRMED",
+        trade,
+        &[
+            format!("signature {signature}"),
+            format!("wallet SOL change {change}"),
+        ],
+    );
+    crate::dashboard_events::landed(
+        true,
+        signature,
+        wallet_lamports_change.map(|change| change as f64 / LAMPORTS_PER_SOL),
+        None,
+    );
 }
 
-pub fn transaction_failed_on_chain(signature: &str, error: &str) {
-    log_line!("[send] landed but FAILED {signature}: {error}");
+pub fn transaction_failed_on_chain(
+    signature: &str,
+    error: &str,
+    trade: &ApprovedArbitrageTrade,
+) {
+    send_block(
+        "landed but FAILED",
+        trade,
+        &[format!("error: {error}"), format!("signature {signature}")],
+    );
+    crate::dashboard_events::landed(false, signature, None, Some(error));
 }
 
-pub fn transaction_not_landed(signature: &str) {
-    log_line!("[send] not landed (dropped or expired) {signature}");
+pub fn transaction_not_landed(signature: &str, trade: &ApprovedArbitrageTrade) {
+    send_block(
+        "not landed (dropped or expired)",
+        trade,
+        &[format!("signature {signature}")],
+    );
+    crate::dashboard_events::landed(false, signature, None, Some("not landed"));
+}
+
+/// Blank lines and `>>> SEND <<<` bracket every send outcome so a search finds the whole trade.
+fn send_block(headline: &str, trade: &ApprovedArbitrageTrade, details: &[String]) {
+    let capped_note = if trade.size_was_capped {
+        "  (capped by MAX_TRADE_INPUT_LAMPORTS)"
+    } else {
+        ""
+    };
+    log_line!();
+    log_line!(">>> SEND <<<");
+    log_line!("[send] {headline}");
+    log_line!(
+        "  {}→{}",
+        pool_label(&trade.sell_pool),
+        pool_label(&trade.buy_pool),
+    );
+    log_line!(
+        "  best size {:.4} SOL  pool profit {:+.6} SOL",
+        sol(trade.best_size_lamports as f64),
+        trade.best_size_pool_profit_lamports as f64 / LAMPORTS_PER_SOL,
+    );
+    log_line!(
+        "  in {:.4} SOL  expected out {:.6} SOL",
+        sol(trade.start_token_amount_in as f64),
+        sol(trade.expected_start_token_out as f64),
+    );
+    log_line!(
+        "  costs {:.6} SOL (fee {} + priority {} + tip {} + flash {} lamports)",
+        sol(trade.costs.total() as f64),
+        trade.costs.network_signature_fee,
+        trade.costs.priority_fee,
+        trade.costs.jito_tip,
+        trade.costs.flash_loan_fee,
+    );
+    log_line!(
+        "  net {:+.6} SOL{capped_note}",
+        trade.expected_profit_after_costs as f64 / LAMPORTS_PER_SOL,
+    );
+    for detail in details {
+        log_line!("  {detail}");
+    }
+    log_line!(">>> SEND <<<");
+    log_line!();
 }

@@ -66,6 +66,12 @@ pub fn geyser_connecting() {
 
 pub fn geyser_subscribed(pool_count: usize) {
     log_line!("[geyser] subscribed to {pool_count} pool account(s), commitment=processed");
+    crate::dashboard_events::geyser(
+        0,
+        "",
+        "status",
+        &format!("subscribed to {pool_count} pool account(s)"),
+    );
 }
 
 pub fn rpc_client_ready() {
@@ -75,4 +81,16 @@ pub fn rpc_client_ready() {
 pub fn waiting_for_account_updates() {
     log_line!("[geyser] waiting for account writes…");
     log_line!();
+    crate::dashboard_events::geyser(0, "", "status", "waiting for account writes");
+}
+
+/// Printed when `DEMO_PRICE_SHIFT_BPS` is set. Sending is forced off in `main`.
+pub fn demo_scenario(basis_points: u64) {
+    log_line!(
+        "[demo] Orca's quoted price is shifted up by {basis_points} bps so a round trip can be sized, built, and simulated. The cache stays real, and sending is forced off."
+    );
+    crate::dashboard_events::log_line(
+        "demo",
+        &format!("demo scenario: Orca +{basis_points} bps, simulate only"),
+    );
 }

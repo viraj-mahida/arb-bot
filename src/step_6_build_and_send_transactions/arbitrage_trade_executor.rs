@@ -24,13 +24,15 @@ use super::assemble_arbitrage_transaction::{
 use super::decide_if_trade_is_worth_it::{
     ApprovedArbitrageTrade, CacheFreshness, TradeDecisionRules, main_decide_if_trade_is_worth_it,
 };
-use super::flash_loan_instructions::{FlashLoanProvider, KaminoFlashLoanAccounts};
+use super::flash_loan_instructions::{
+    FlashLoanProvider, JupiterFlashLoanAccounts, KaminoFlashLoanAccounts,
+};
 use super::jito_tip_instruction::{default_jito_tip_accounts, pick_tip_account};
 use super::send_and_confirm::{
     RouteTransactions, SendingClients, main_simulate_then_send_if_allowed,
 };
 use super::trading_wallet::TradingWallet;
-use crate::bot_settings::{BotSettingsFromEnvironment, FundingMode};
+use crate::bot_settings::{BotSettingsFromEnvironment, FlashLoanLender, FundingMode};
 use crate::print_logs;
 use crate::solana_connections::{JitoBlockEngineClient, SolanaRpcClient};
 use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, PublicKeyBytes};
@@ -64,16 +66,37 @@ impl ArbitrageTradeExecutor {
 
         let flash_loan_provider = match &settings.funding_mode {
             FundingMode::OwnWallet => None,
-            FundingMode::FlashLoan(kamino) => {
-                let reserve_bytes = fetch_one_account(rpc, kamino.sol_reserve_address).await?;
-                Some(FlashLoanProvider::Kamino(
-                    KaminoFlashLoanAccounts::from_reserve_account_bytes(
-                        kamino.lending_market_address,
-                        kamino.sol_reserve_address,
-                        &reserve_bytes,
-                    )?,
-                ))
-            }
+            FundingMode::FlashLoan(flash) => match &flash.lender {
+                FlashLoanLender::Kamino {
+                    lending_market_address,
+                    sol_reserve_address,
+                } => {
+                    let reserve_bytes = fetch_one_account(rpc, *sol_reserve_address).await?;
+                    Some(FlashLoanProvider::Kamino(
+                        KaminoFlashLoanAccounts::from_reserve_account_bytes(
+                            *lending_market_address,
+                            *sol_reserve_address,
+                            &reserve_bytes,
+                        )?,
+                    ))
+                }
+                FlashLoanLender::Jupiter => {
+                    let admin_bytes =
+                        fetch_one_account(rpc, JupiterFlashLoanAccounts::flashloan_admin_address())
+                            .await?;
+                    let accounts = JupiterFlashLoanAccounts::from_admin_account_bytes(&admin_bytes)?;
+                    // The cost model was built from FLASH_LOAN_FEE_BPS; a higher live fee
+                    // would make every profit estimate too optimistic.
+                    if u64::from(accounts.fee_in_basis_points) > flash.flash_loan_fee_in_basis_points
+                    {
+                        return Err(format!(
+                            "Jupiter flash-loan fee is now {} bps; set FLASH_LOAN_FEE_BPS to at least that",
+                            accounts.fee_in_basis_points
+                        ));
+                    }
+                    Some(FlashLoanProvider::Jupiter(accounts))
+                }
+            },
         };
 
         let mut address_lookup_tables = Vec::new();
@@ -100,6 +123,11 @@ impl ArbitrageTradeExecutor {
         .unwrap_or_else(default_jito_tip_accounts);
 
         print_logs::trading_ready(&settings, &wallet.address(), address_lookup_tables.len());
+        if let Ok(lamports) = rpc.get_balance(&wallet.address()).await {
+            print_logs::wallet_balance(lamports);
+        } else {
+            print_logs::wallet_balance_unreadable();
+        }
         Ok(Some(Arc::new(Self {
             rules: TradeDecisionRules::from_settings(&settings),
             settings,
@@ -238,6 +266,7 @@ impl ArbitrageTradeExecutor {
             &clients,
             &routes,
             &self.wallet.address(),
+            trade,
             self.settings.simulate_on_rpc_before_sending,
             self.settings.send_real_transactions,
         )
