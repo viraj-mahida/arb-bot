@@ -64,6 +64,19 @@ pub fn geyser_connecting() {
     log_line!("[geyser] connecting to Yellowstone gRPC…");
 }
 
+pub fn blockhash_cache_live(slot: u64, blockhash: &str) {
+    log_line!("[geyser/blockhash] cache live  slot={slot:<10} hash={blockhash}");
+    crate::dashboard_events::geyser(slot, "", "blockhash", "blockhash cache live");
+}
+
+pub fn blockhash_stream_error(error: &str) {
+    log_error!("[error] blockhash stream: {error}");
+}
+
+pub fn blockhash_cache_stale_using_rpc() {
+    log_line!("[geyser/blockhash] cache empty or stale; using getLatestBlockhash");
+}
+
 pub fn geyser_subscribed(pool_count: usize) {
     log_line!("[geyser] subscribed to {pool_count} pool account(s), commitment=processed");
     crate::dashboard_events::geyser(

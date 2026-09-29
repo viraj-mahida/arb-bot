@@ -12,7 +12,9 @@
 //!   ("tell me whenever these accounts change") and the validator pushes every
 //!   new write the moment it happens. Much faster than polling RPC, but it only
 //!   reports *future* changes, never the current state.
-//!   See [`geyser_grpc_client`].
+//!   See [`geyser_grpc_client`]. The same subscription also asks for
+//!   `blocks_meta`, so each new blockhash arrives on that stream;
+//!   see [`recent_blockhash_cache`].
 //!
 //! The bot needs both: Geyser to react instantly, RPC to fill in the state that
 //! existed before we subscribed and to simulate and send transactions.
@@ -26,8 +28,10 @@
 
 mod geyser_grpc_client;
 mod jito_block_engine_client;
+mod recent_blockhash_cache;
 mod solana_rpc_client;
 
 pub use geyser_grpc_client::*;
 pub use jito_block_engine_client::*;
+pub use recent_blockhash_cache::RecentBlockhashCache;
 pub use solana_rpc_client::*;

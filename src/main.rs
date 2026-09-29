@@ -64,10 +64,10 @@ use crate::bot_settings::BotSettingsFromEnvironment;
 use crate::solana_connections::{SolanaRpcClient, connect_to_geyser_grpc};
 use crate::step_1_listen_to_account_updates::main_process_account_updates_forever;
 use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, WatchedPools};
+use crate::step_6_build_and_send_transactions::ArbitrageTradeExecutor;
 use crate::step_6_build_and_send_transactions::decide_if_trade_is_worth_it::{
     TradeDecisionRules, costs_of_primary_send_route,
 };
-use crate::step_6_build_and_send_transactions::ArbitrageTradeExecutor;
 
 pub(crate) mod bot_settings;
 pub(crate) mod dashboard_events;
@@ -153,10 +153,14 @@ async fn main() {
         Err(error) => panic!("trading is configured but could not start: {error}"),
     };
 
-    let (geyser_subscription_sender, geyser_account_update_stream) =
-        connect_to_geyser_grpc(&watched_pools)
-            .await
-            .expect("failed to open Geyser stream");
+    let (geyser_subscription_sender, geyser_account_update_stream) = connect_to_geyser_grpc(
+        &watched_pools,
+        trade_executor
+            .as_deref()
+            .map(ArbitrageTradeExecutor::blockhash_cache),
+    )
+    .await
+    .expect("failed to open Geyser stream");
     main_process_account_updates_forever(
         geyser_account_update_stream,
         geyser_subscription_sender,

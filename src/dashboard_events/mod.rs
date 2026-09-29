@@ -308,7 +308,9 @@ pub fn quote(
         "partial": partial,
     });
     if let Some(costs) = PRIMARY_ROUTE_COSTS.get() {
-        attach_quote_costs(&mut event, input_sol, profit_sol, profitable, partial, costs);
+        attach_quote_costs(
+            &mut event, input_sol, profit_sol, profitable, partial, costs,
+        );
     }
     publish(event);
 }
@@ -327,10 +329,9 @@ fn attach_quote_costs(
         + u128::from(costs.priority_fee_lamports)
         + u128::from(costs.jito_tip_lamports)
         + u128::from(flash_fee);
-    let net_lamports = sol_to_lamports(profit_sol) - i128::try_from(total_costs).unwrap_or(i128::MAX);
-    let worth_it = profitable
-        && !partial
-        && net_lamports >= i128::from(costs.min_profit_lamports);
+    let net_lamports =
+        sol_to_lamports(profit_sol) - i128::try_from(total_costs).unwrap_or(i128::MAX);
+    let worth_it = profitable && !partial && net_lamports >= i128::from(costs.min_profit_lamports);
     event["feeSol"] = json!(lamports_to_sol(i128::from(costs.network_fee_lamports)));
     event["tipSol"] = json!(lamports_to_sol(i128::from(costs.jito_tip_lamports)));
     event["prioritySol"] = json!(lamports_to_sol(i128::from(costs.priority_fee_lamports)));

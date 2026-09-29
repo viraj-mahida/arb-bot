@@ -173,9 +173,8 @@ async fn collect_addresses(
 
     for pool_config in WatchedPools::sol_usdc_pools().all_configs() {
         let pool_bytes = fetch_account(rpc, pool_config.pool_address).await?;
-        let pool = main_decode_pool_account(pool_config, &pool_bytes, 0, 0).ok_or_else(|| {
-            format!("could not decode pool {}", pool_config.pool_address_base58)
-        })?;
+        let pool = main_decode_pool_account(pool_config, &pool_bytes, 0, 0)
+            .ok_or_else(|| format!("could not decode pool {}", pool_config.pool_address_base58))?;
         for address in [
             pool.pool_address,
             pool.token_a_mint,
@@ -212,7 +211,12 @@ async fn fetch_account(rpc: &SolanaRpcClient, address: PublicKeyBytes) -> Result
         .next()
         .flatten()
         .map(|account| account.account_data)
-        .ok_or_else(|| format!("account {} not found", encode_public_key_as_base58(&address)))
+        .ok_or_else(|| {
+            format!(
+                "account {} not found",
+                encode_public_key_as_base58(&address)
+            )
+        })
 }
 
 /// `CreateLookupTable { recent_slot, bump_seed }` (instruction 0).
@@ -250,12 +254,18 @@ fn extend_instruction(
     )
 }
 
-fn table_accounts(authority_and_payer: &PublicKeyBytes, table: &PublicKeyBytes) -> Vec<AccountMeta> {
+fn table_accounts(
+    authority_and_payer: &PublicKeyBytes,
+    table: &PublicKeyBytes,
+) -> Vec<AccountMeta> {
     vec![
         AccountMeta::new(pubkey(*table), false),
         AccountMeta::new_readonly(pubkey(*authority_and_payer), true),
         AccountMeta::new(pubkey(*authority_and_payer), true),
-        AccountMeta::new_readonly(pubkey(parse_base58_public_key(SYSTEM_PROGRAM_ADDRESS)), false),
+        AccountMeta::new_readonly(
+            pubkey(parse_base58_public_key(SYSTEM_PROGRAM_ADDRESS)),
+            false,
+        ),
     ]
 }
 
@@ -286,5 +296,7 @@ async fn send_and_wait(
             }
         }
     }
-    Err(format!("lookup-table transaction {signature} was not confirmed in 60 s; re-run"))
+    Err(format!(
+        "lookup-table transaction {signature} was not confirmed in 60 s; re-run"
+    ))
 }

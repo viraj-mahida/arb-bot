@@ -139,12 +139,7 @@ async fn submit<'a>(
             Some(transaction)
         }
         Err(error) => {
-            print_logs::send_failed(
-                "rpc",
-                &error,
-                trade,
-                Some(&transaction.signature_base58),
-            );
+            print_logs::send_failed("rpc", &error, trade, Some(&transaction.signature_base58));
             None
         }
     }

@@ -100,6 +100,10 @@ impl SolanaRpcClient {
     }
 
     /// A recent blockhash (base58) to stamp on a new transaction.
+    ///
+    /// Trades do not call this on the hot path. They read [`super::RecentBlockhashCache`],
+    /// which Yellowstone `blocks_meta` updates every slot. This remains for
+    /// one-shot work (lookup-table creation) and for when that cache is empty.
     pub async fn get_latest_blockhash(&self) -> Result<String, String> {
         let result: ValueWithContext<LatestBlockhashJson> = self
             .call(
@@ -112,8 +116,11 @@ impl SolanaRpcClient {
 
     /// Current slot at `confirmed` commitment (lookup-table creation needs a recent one).
     pub async fn get_slot(&self) -> Result<u64, String> {
-        self.call("getSlot", serde_json::json!([{ "commitment": "confirmed" }]))
-            .await
+        self.call(
+            "getSlot",
+            serde_json::json!([{ "commitment": "confirmed" }]),
+        )
+        .await
     }
 
     /// SOL balance of an address, in lamports.

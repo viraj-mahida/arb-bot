@@ -1,4 +1,4 @@
-//! Yellowstone Geyser gRPC client: a live stream of account changes.
+//! Yellowstone Geyser gRPC client: one live stream of account changes and blockhashes.
 //!
 //! **Geyser** is a plugin inside a Solana validator that can forward every
 //! account write, transaction, and slot as it happens. **Yellowstone** is the
@@ -17,7 +17,10 @@ use yellowstone_grpc_client::{
 };
 use yellowstone_grpc_proto::geyser::{
     CommitmentLevel, SubscribeRequest, SubscribeRequestFilterAccounts,
+    SubscribeRequestFilterBlocksMeta,
 };
+
+use super::RecentBlockhashCache;
 
 use crate::print_logs;
 use crate::step_3_store_latest_pool_state::WatchedPools;
@@ -27,32 +30,54 @@ pub type GeyserSubscriptionSender = SubscribeRequestSink;
 /// The half of the connection the validator pushes account updates into.
 pub type GeyserAccountUpdateStream = GeyserStream;
 
-/// Connect to Geyser (`GRPC_URL` + `X_TOKEN` from the environment) and
-/// subscribe to every watched pool account.
-pub async fn connect_to_geyser_grpc(
-    watched_pools: &WatchedPools,
-) -> GeyserGrpcClientResult<(GeyserSubscriptionSender, GeyserAccountUpdateStream)> {
-    let grpc_url = std::env::var("GRPC_URL").expect("GRPC_URL missing from environment / .env");
-    let access_token = std::env::var("X_TOKEN").expect("X_TOKEN missing from environment / .env");
+/// Open a Yellowstone client from `GRPC_URL` + `X_TOKEN`.
+async fn connect_geyser_client() -> Result<GeyserGrpcClient, String> {
+    let grpc_url =
+        std::env::var("GRPC_URL").map_err(|_| "GRPC_URL missing from environment / .env")?;
+    let access_token =
+        std::env::var("X_TOKEN").map_err(|_| "X_TOKEN missing from environment / .env")?;
 
-    print_logs::geyser_connecting();
     let mut client_builder = GeyserGrpcClient::build_from_shared(grpc_url.clone())
-        .expect("failed to create gRPC client");
+        .map_err(|error| format!("failed to create gRPC client: {error}"))?;
 
     if grpc_url.starts_with("https://") {
         client_builder = client_builder
             .tls_config(ClientTlsConfig::new().with_native_roots())
-            .expect("failed to configure TLS");
+            .map_err(|error| format!("failed to configure TLS: {error}"))?;
     }
 
     client_builder = client_builder
         .x_token(Some(access_token.as_str()))
-        .expect("failed to set X-token");
+        .map_err(|error| format!("failed to set X-token: {error}"))?;
 
-    let mut client = client_builder
+    client_builder
         .connect()
         .await
+        .map_err(|error| format!("failed to connect to gRPC: {error}"))
+}
+
+/// Connect to Geyser (`GRPC_URL` + `X_TOKEN` from the environment) and
+/// subscribe to every watched pool account, plus `blocks_meta` so the
+/// blockhash cache updates on the same connection.
+///
+/// `blockhash_cache` is set only when trading is configured. The unary
+/// `GetLatestBlockhash` seeds it before the first slot arrives. Watch-only
+/// runs pass `None` and ignore `blocks_meta` messages.
+pub async fn connect_to_geyser_grpc(
+    watched_pools: &WatchedPools,
+    blockhash_cache: Option<&RecentBlockhashCache>,
+) -> GeyserGrpcClientResult<(GeyserSubscriptionSender, GeyserAccountUpdateStream)> {
+    print_logs::geyser_connecting();
+    let mut client = connect_geyser_client()
+        .await
         .expect("failed to connect to gRPC");
+    if let Some(cache) = blockhash_cache
+        && let Ok(latest) = client
+            .get_latest_blockhash(Some(CommitmentLevel::Processed))
+            .await
+    {
+        cache.store(latest.slot, &latest.blockhash);
+    }
     let (mut subscription_sender, account_update_stream) = client
         .subscribe()
         .await
@@ -67,11 +92,12 @@ pub async fn connect_to_geyser_grpc(
     Ok((subscription_sender, account_update_stream))
 }
 
-/// Tell Geyser which accounts to stream.
+/// Tell Geyser which accounts to stream, and keep `blocks_meta` on the same request.
 ///
 /// Important: each request *replaces* the previous filter, it does not add to
 /// it. So when we start watching new tick arrays, we must send the complete
-/// list (pools + every tick array so far), not just the new addresses.
+/// list (pools + every tick array so far), not just the new addresses — and
+/// we must send `blocks_meta` again, or the blockhash feed stops.
 ///
 /// `Processed` commitment = send each write as soon as the validator executes
 /// it, before the network has voted on the block. Fastest possible signal;
@@ -89,10 +115,16 @@ pub async fn subscribe_to_account_updates(
             ..Default::default()
         },
     );
+    let mut blocks_meta = HashMap::new();
+    blocks_meta.insert(
+        "blocks_meta".to_string(),
+        SubscribeRequestFilterBlocksMeta {},
+    );
 
     subscription_sender
         .send(SubscribeRequest {
             accounts: account_filters,
+            blocks_meta,
             commitment: Some(CommitmentLevel::Processed as i32),
             ..Default::default()
         })

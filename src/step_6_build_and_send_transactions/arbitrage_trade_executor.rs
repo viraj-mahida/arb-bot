@@ -9,8 +9,10 @@
 //! first trade is about to change.
 //!
 //! **Background task:** building, simulating, and confirming take network
-//! round trips (hundreds of milliseconds). They run in a spawned tokio task so
-//! the Geyser loop keeps consuming updates and the cache stays fresh.
+//! round trips (hundreds of milliseconds). The recent blockhash is not one of
+//! them: `blocks_meta` on the same Geyser subscription fills a cache, replaced
+//! only when a newer slot arrives. The rest runs in a spawned tokio task so
+//! the Geyser loop keeps consuming updates and the pool cache stays fresh.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -34,7 +36,7 @@ use super::send_and_confirm::{
 use super::trading_wallet::TradingWallet;
 use crate::bot_settings::{BotSettingsFromEnvironment, FlashLoanLender, FundingMode};
 use crate::print_logs;
-use crate::solana_connections::{JitoBlockEngineClient, SolanaRpcClient};
+use crate::solana_connections::{JitoBlockEngineClient, RecentBlockhashCache, SolanaRpcClient};
 use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, PublicKeyBytes};
 use crate::step_4_quote_swaps::{CachedPoolWithTickArrays, pool_label};
 
@@ -43,6 +45,7 @@ pub struct ArbitrageTradeExecutor {
     rules: TradeDecisionRules,
     wallet: TradingWallet,
     rpc: SolanaRpcClient,
+    blockhash_cache: RecentBlockhashCache,
     jito: Option<JitoBlockEngineClient>,
     jito_tip_accounts: Vec<PublicKeyBytes>,
     flash_loan_provider: Option<FlashLoanProvider>,
@@ -84,10 +87,12 @@ impl ArbitrageTradeExecutor {
                     let admin_bytes =
                         fetch_one_account(rpc, JupiterFlashLoanAccounts::flashloan_admin_address())
                             .await?;
-                    let accounts = JupiterFlashLoanAccounts::from_admin_account_bytes(&admin_bytes)?;
+                    let accounts =
+                        JupiterFlashLoanAccounts::from_admin_account_bytes(&admin_bytes)?;
                     // The cost model was built from FLASH_LOAN_FEE_BPS; a higher live fee
                     // would make every profit estimate too optimistic.
-                    if u64::from(accounts.fee_in_basis_points) > flash.flash_loan_fee_in_basis_points
+                    if u64::from(accounts.fee_in_basis_points)
+                        > flash.flash_loan_fee_in_basis_points
                     {
                         return Err(format!(
                             "Jupiter flash-loan fee is now {} bps; set FLASH_LOAN_FEE_BPS to at least that",
@@ -122,6 +127,7 @@ impl ArbitrageTradeExecutor {
         }
         .unwrap_or_else(default_jito_tip_accounts);
 
+        let blockhash_cache = RecentBlockhashCache::new();
         print_logs::trading_ready(&settings, &wallet.address(), address_lookup_tables.len());
         if let Ok(lamports) = rpc.get_balance(&wallet.address()).await {
             print_logs::wallet_balance(lamports);
@@ -133,12 +139,22 @@ impl ArbitrageTradeExecutor {
             settings,
             wallet,
             rpc: rpc.clone(),
+            blockhash_cache,
             jito,
             jito_tip_accounts,
             flash_loan_provider,
             address_lookup_tables,
             trade_in_flight: AtomicBool::new(false),
         })))
+    }
+
+    /// Write a `blocks_meta` update from the shared Geyser stream into the cache.
+    pub fn note_blockhash(&self, slot: u64, blockhash: &str) {
+        self.blockhash_cache.store(slot, blockhash);
+    }
+
+    pub fn blockhash_cache(&self) -> &RecentBlockhashCache {
+        &self.blockhash_cache
     }
 
     /// Called after every pool update: check both directions against every
@@ -206,12 +222,22 @@ impl ArbitrageTradeExecutor {
     }
 
     async fn build_and_send(&self, trade: &ApprovedArbitrageTrade) {
-        let recent_blockhash = match self.rpc.get_latest_blockhash().await {
-            Ok(blockhash) => blockhash,
-            Err(error) => return print_logs::trade_build_failed(&error),
-        };
-        let Ok(recent_blockhash) = recent_blockhash.parse::<solana_hash::Hash>() else {
-            return print_logs::trade_build_failed("RPC returned an invalid blockhash");
+        let recent_blockhash = match self.blockhash_cache.fresh_hash() {
+            Some(hash) => hash,
+            None => match self.rpc.get_latest_blockhash().await {
+                Ok(blockhash) => {
+                    print_logs::blockhash_cache_stale_using_rpc();
+                    match blockhash.parse::<solana_hash::Hash>() {
+                        Ok(hash) => hash,
+                        Err(_) => {
+                            return print_logs::trade_build_failed(
+                                "RPC returned an invalid blockhash",
+                            );
+                        }
+                    }
+                }
+                Err(error) => return print_logs::trade_build_failed(&error),
+            },
         };
 
         let funding = match &self.flash_loan_provider {

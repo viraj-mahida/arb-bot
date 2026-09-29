@@ -231,11 +231,7 @@ pub fn transaction_landed(
     );
 }
 
-pub fn transaction_failed_on_chain(
-    signature: &str,
-    error: &str,
-    trade: &ApprovedArbitrageTrade,
-) {
+pub fn transaction_failed_on_chain(signature: &str, error: &str, trade: &ApprovedArbitrageTrade) {
     send_block(
         "landed but FAILED",
         trade,

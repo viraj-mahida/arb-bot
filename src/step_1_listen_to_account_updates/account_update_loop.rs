@@ -59,34 +59,43 @@ pub async fn main_process_account_updates_forever(
                 continue;
             }
         };
-        // Geyser can also send slot, transaction, and ping messages; we only asked for accounts.
-        let Some(UpdateOneof::Account(account_update)) = update.update_oneof else {
-            continue;
-        };
-        let Some(account) = &account_update.account else {
-            continue;
-        };
-        let Some(account_address) = public_key_from_byte_slice(&account.pubkey) else {
-            continue;
-        };
-        cache.record_stream_update(account_update.slot);
+        // The same subscription asks for accounts and blocks_meta. Ping and
+        // other message kinds are ignored; a ping reply would replace the filters.
+        match update.update_oneof {
+            Some(UpdateOneof::BlockMeta(meta)) => {
+                if let Some(executor) = &listener.trade_executor {
+                    executor.note_blockhash(meta.slot, &meta.blockhash);
+                }
+            }
+            Some(UpdateOneof::Account(account_update)) => {
+                let Some(account) = &account_update.account else {
+                    continue;
+                };
+                let Some(account_address) = public_key_from_byte_slice(&account.pubkey) else {
+                    continue;
+                };
+                cache.record_stream_update(account_update.slot);
 
-        if let Some(pool_config) = watched_pools.config_for_pool_address(&account_address) {
-            listener
-                .main_handle_pool_account_update(
-                    pool_config,
-                    &account.data,
-                    account_update.slot,
-                    account.write_version,
-                )
-                .await;
-        } else if let Some(watched_tick_array) = cache.watched_tick_array(&account_address) {
-            listener.main_handle_tick_array_account_update(
-                &watched_tick_array,
-                &account.data,
-                account_update.slot,
-                account.write_version,
-            );
+                if let Some(pool_config) = watched_pools.config_for_pool_address(&account_address) {
+                    listener
+                        .main_handle_pool_account_update(
+                            pool_config,
+                            &account.data,
+                            account_update.slot,
+                            account.write_version,
+                        )
+                        .await;
+                } else if let Some(watched_tick_array) = cache.watched_tick_array(&account_address)
+                {
+                    listener.main_handle_tick_array_account_update(
+                        &watched_tick_array,
+                        &account.data,
+                        account_update.slot,
+                        account.write_version,
+                    );
+                }
+            }
+            _ => {}
         }
     }
 }

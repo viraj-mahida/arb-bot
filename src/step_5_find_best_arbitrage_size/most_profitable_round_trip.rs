@@ -80,6 +80,10 @@ fn publish_profit_curve_samples(
         ));
     }
     if !points.is_empty() {
-        crate::dashboard_events::profit_curve(&points, &pool_label(sell_pool), &pool_label(buy_pool));
+        crate::dashboard_events::profit_curve(
+            &points,
+            &pool_label(sell_pool),
+            &pool_label(buy_pool),
+        );
     }
 }
