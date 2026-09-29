@@ -3,10 +3,11 @@
 //! **Start here:** [`ArbitrageTradeExecutor::prepare`] (startup) and
 //! [`ArbitrageTradeExecutor::main_consider_trading`] (every pool update).
 //!
-//! **Single flight:** only one trade runs at a time. Pool updates arrive many
-//! times per second; without this guard the bot could fire a second trade
-//! with the same SOL before the first one finished, or trade against state the
-//! first trade is about to change.
+//! **Single flight while building:** only one trade is built and submitted at
+//! a time. The lock drops once a route accepts the transaction, not after the
+//! confirmation poll (that poll can run for about 60 seconds). A one-second
+//! pause then stops the same still-cached quote from being sent again on the
+//! next pool update. Confirmation keeps running in the background.
 //!
 //! **Background task:** building, simulating, and confirming take network
 //! round trips (hundreds of milliseconds). The recent blockhash is not one of
@@ -16,6 +17,7 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use solana_message::AddressLookupTableAccount;
 
@@ -31,7 +33,7 @@ use super::flash_loan_instructions::{
 };
 use super::jito_tip_instruction::{default_jito_tip_accounts, pick_tip_account};
 use super::send_and_confirm::{
-    RouteTransactions, SendingClients, main_simulate_then_send_if_allowed,
+    RouteTransactions, SendingClients, main_simulate_then_send_if_allowed, wait_for_confirmation,
 };
 use super::trading_wallet::TradingWallet;
 use crate::bot_settings::{BotSettingsFromEnvironment, FlashLoanLender, FundingMode};
@@ -51,7 +53,14 @@ pub struct ArbitrageTradeExecutor {
     flash_loan_provider: Option<FlashLoanProvider>,
     address_lookup_tables: Vec<AddressLookupTableAccount>,
     trade_in_flight: AtomicBool,
+    /// Earliest time another trade may be submitted. Set when a send is accepted.
+    next_submit_at: std::sync::Mutex<Instant>,
 }
+
+/// After a send is accepted, ignore new trades this long. Long enough that the
+/// next pool update does not resend the same quote; short enough that a later
+/// gap is not skipped for the whole confirmation poll.
+const AFTER_SUBMIT_COOLDOWN: Duration = Duration::from_secs(1);
 
 impl ArbitrageTradeExecutor {
     /// Load the wallet and every on-chain account trading needs.
@@ -145,6 +154,7 @@ impl ArbitrageTradeExecutor {
             flash_loan_provider,
             address_lookup_tables,
             trade_in_flight: AtomicBool::new(false),
+            next_submit_at: std::sync::Mutex::new(Instant::now()),
         })))
     }
 
@@ -207,6 +217,11 @@ impl ArbitrageTradeExecutor {
     }
 
     fn start_trade_unless_one_is_running(self: &Arc<Self>, trade: ApprovedArbitrageTrade) {
+        if let Ok(next_submit_at) = self.next_submit_at.lock()
+            && Instant::now() < *next_submit_at
+        {
+            return print_logs::trade_on_cooldown();
+        }
         if self
             .trade_in_flight
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -216,12 +231,31 @@ impl ArbitrageTradeExecutor {
         }
         let executor = Arc::clone(self);
         tokio::spawn(async move {
-            executor.build_and_send(&trade).await;
+            let submitted = executor.build_and_send(&trade).await;
+            if submitted.is_some()
+                && let Ok(mut next_submit_at) = executor.next_submit_at.lock()
+            {
+                *next_submit_at = Instant::now() + AFTER_SUBMIT_COOLDOWN;
+            }
             executor.trade_in_flight.store(false, Ordering::Release);
+            if let Some(submitted) = submitted {
+                wait_for_confirmation(
+                    &executor.rpc,
+                    &submitted.signature_base58,
+                    &executor.wallet.address(),
+                    submitted.balance_before,
+                    &trade,
+                )
+                .await;
+            }
         });
     }
 
-    async fn build_and_send(&self, trade: &ApprovedArbitrageTrade) {
+    /// `Some` when a route accepted the transaction. Confirmation is separate.
+    async fn build_and_send(
+        &self,
+        trade: &ApprovedArbitrageTrade,
+    ) -> Option<super::send_and_confirm::SubmittedTransaction> {
         let recent_blockhash = match self.blockhash_cache.fresh_hash() {
             Some(hash) => hash,
             None => match self.rpc.get_latest_blockhash().await {
@@ -230,13 +264,15 @@ impl ArbitrageTradeExecutor {
                     match blockhash.parse::<solana_hash::Hash>() {
                         Ok(hash) => hash,
                         Err(_) => {
-                            return print_logs::trade_build_failed(
-                                "RPC returned an invalid blockhash",
-                            );
+                            print_logs::trade_build_failed("RPC returned an invalid blockhash");
+                            return None;
                         }
                     }
                 }
-                Err(error) => return print_logs::trade_build_failed(&error),
+                Err(error) => {
+                    print_logs::trade_build_failed(&error);
+                    return None;
+                }
             },
         };
 
@@ -265,7 +301,10 @@ impl ArbitrageTradeExecutor {
                 jito_tip: Some((tip_account, self.settings.jito_tip_lamports)),
             }) {
                 Ok(transaction) => Some(transaction),
-                Err(error) => return print_logs::trade_build_failed(&error),
+                Err(error) => {
+                    print_logs::trade_build_failed(&error);
+                    return None;
+                }
             },
             None => None,
         };
@@ -277,7 +316,10 @@ impl ArbitrageTradeExecutor {
             jito_tip: None,
         }) {
             Ok(transaction) => transaction,
-            Err(error) => return print_logs::trade_build_failed(&error),
+            Err(error) => {
+                print_logs::trade_build_failed(&error);
+                return None;
+            }
         };
 
         let clients = SendingClients {
@@ -296,7 +338,7 @@ impl ArbitrageTradeExecutor {
             self.settings.simulate_on_rpc_before_sending,
             self.settings.send_real_transactions,
         )
-        .await;
+        .await
     }
 }
 

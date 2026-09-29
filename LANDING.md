@@ -22,11 +22,17 @@ Today `build_and_send` in `src/step_6_build_and_send_transactions/arbitrage_trad
 
 That is the ~290 ms. The 5 ms quote is not the problem.
 
-- **Cache the blockhash off the send path.** Refresh it in the background, about once a slot. The send should sign with the cached hash and return. A blockhash is valid for about 60 seconds, so a refresh every slot is plenty.
++ **Cache the blockhash off the send path.** Refresh it in the background, about once a slot. The send should sign with the cached hash and return. A blockhash is valid for about 60 seconds, so a refresh every slot is plenty.
 - **Use a regional Jito engine.** The default host is a global URL. Send to the region closest to the machine that runs the bot (`amsterdam`, `frankfurt`, `london`, `ny`, `slc`, `tokyo`, `singapore`, each as `https://<region>.mainnet.block-engine.jito.wtf`). From India that is Tokyo or Singapore, not the global host.
+
+Pin one region for now: Singapore, if this machine stays in India. Ping Tokyo once and keep whichever is lower. Do not use the global host. It adds a hop before it picks a region for you.
+
+Serious bots do not stay on that one region. They call Jito's GetNextScheduledLeader / GetConnectedLeadersRegioned and send the bundle to the region that the next leader is connected to. A Solana leader schedule alone does not say that region. Most stake sits in the US and Europe, so a Singapore-only send still waits for a forward when the leader is in New York or Frankfurt.
+
+That routing only matters after the bot itself is near an engine. From India, the flight to Singapore is already most of the 290 ms. Moving the sender into Singapore or Tokyo beats swapping regions from home.
 - **Use an RPC and a Geyser close to that same machine.** Detection time is the Geyser hop before the 5 ms of math. Public endpoints add both the detect delay and the blockhash delay.
-- **Keep `RPC_SIMULATION` false on this path.** A simulate-before-send is another full round trip. The chain's minimum-output check already reverts a stale trade, and Jito drops that bundle.
-- **Release the in-flight lock when the bundle is submitted, not when confirmation ends.** `trade_in_flight` stays set until `wait_for_confirmation` finishes, which is about 60 seconds of polling (`CONFIRMATION_POLL_ATTEMPTS` 120 × 500 ms). A second arb during that minute is skipped with `previous trade still in flight`.
++ **Keep `RPC_SIMULATION` false on this path.** A simulate-before-send is another full round trip. The chain's minimum-output check already reverts a stale trade, and Jito drops that bundle.
+- **Do not hold the in-flight lock across confirmation.** `trade_in_flight` used to stay set until `wait_for_confirmation` finished (~60 s). Releasing it at the exact moment of submit is also wrong: the same quote is still cached, so the next pool update would send it again. The lock now covers build and submit only, then a 1 s cooldown. Confirmation still polls in the background.
 - **Do not buy speed by raising `SLIPPAGE_TOLERANCE_BPS`.** It is 0, so a stale price reverts instead of landing a loss. The fix is to arrive while the quote is still true.
 
 ## Tip

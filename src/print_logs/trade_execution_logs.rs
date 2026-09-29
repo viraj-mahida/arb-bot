@@ -140,7 +140,11 @@ pub fn trade_approved(trade: &ApprovedArbitrageTrade) {
 }
 
 pub fn trade_already_in_flight() {
-    log_line!("[decide]  skip: previous trade still in flight");
+    log_line!("[decide]  skip: previous trade still being submitted");
+}
+
+pub fn trade_on_cooldown() {
+    log_line!("[decide]  skip: last bundle was submitted less than a second ago");
 }
 
 pub fn trade_build_failed(error: &str) {

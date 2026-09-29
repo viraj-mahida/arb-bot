@@ -12,8 +12,8 @@
 //!    RPC-shaped transaction (compute-unit limit + priority price, no tip).
 //!    The two are never sent together. With no block engine, only the RPC
 //!    shape is built.
-//! 4. **Confirm** by polling the signature until it is `confirmed`, fails,
-//!    or the blockhash expires. Then measure the real SOL change.
+//! 4. **Return** once a route has accepted the transaction. The caller confirms
+//!    in the background, so the in-flight lock is not held for the whole poll.
 
 use std::time::Duration;
 
@@ -40,6 +40,12 @@ pub struct RouteTransactions<'a> {
     pub rpc: Option<&'a SignedTransaction>,
 }
 
+/// A transaction some route accepted. Confirmation has not been polled yet.
+pub struct SubmittedTransaction {
+    pub signature_base58: String,
+    pub balance_before: Option<u64>,
+}
+
 pub async fn main_simulate_then_send_if_allowed(
     clients: &SendingClients<'_>,
     routes: &RouteTransactions<'_>,
@@ -47,12 +53,14 @@ pub async fn main_simulate_then_send_if_allowed(
     trade: &ApprovedArbitrageTrade,
     simulate_on_rpc: bool,
     send_real_transactions: bool,
-) {
+) -> Option<SubmittedTransaction> {
     if !simulate_on_rpc && !send_real_transactions {
-        return print_logs::send_skipped_simulate_only(trade);
+        print_logs::send_skipped_simulate_only(trade);
+        return None;
     }
     let Some(primary) = routes.jito.or(routes.rpc) else {
-        return print_logs::trade_build_failed("no transaction to send");
+        print_logs::trade_build_failed("no transaction to send");
+        return None;
     };
 
     let balance_before = if simulate_on_rpc {
@@ -63,17 +71,22 @@ pub async fn main_simulate_then_send_if_allowed(
             .await
         {
             Ok(simulation) => simulation,
-            Err(error) => return print_logs::simulation_request_failed(&error),
+            Err(error) => {
+                print_logs::simulation_request_failed(&error);
+                return None;
+            }
         };
         if let Some(error) = &simulation.error {
-            return print_logs::simulation_failed(error, &simulation.logs);
+            print_logs::simulation_failed(error, &simulation.logs);
+            return None;
         }
         print_logs::simulation_succeeded(
             simulation.compute_units_consumed,
             lamports_change(balance_before, simulation.watch_address_lamports_after),
         );
         if !send_real_transactions {
-            return print_logs::send_skipped_simulate_only(trade);
+            print_logs::send_skipped_simulate_only(trade);
+            return None;
         }
         balance_before
     } else {
@@ -83,30 +96,18 @@ pub async fn main_simulate_then_send_if_allowed(
             clients.rpc.get_balance(wallet),
             submit(clients, routes, trade)
         );
-        let Some(accepted) = accepted else {
-            return;
-        };
-        return wait_for_confirmation(
-            clients.rpc,
-            &accepted.signature_base58,
-            wallet,
-            balance_before.ok(),
-            trade,
-        )
-        .await;
+        let accepted = accepted?;
+        return Some(SubmittedTransaction {
+            signature_base58: accepted.signature_base58.clone(),
+            balance_before: balance_before.ok(),
+        });
     };
 
-    let Some(accepted) = submit(clients, routes, trade).await else {
-        return;
-    };
-    wait_for_confirmation(
-        clients.rpc,
-        &accepted.signature_base58,
-        wallet,
+    let accepted = submit(clients, routes, trade).await?;
+    Some(SubmittedTransaction {
+        signature_base58: accepted.signature_base58.clone(),
         balance_before,
-        trade,
-    )
-    .await;
+    })
 }
 
 /// Returns the transaction some route accepted.
@@ -145,7 +146,7 @@ async fn submit<'a>(
     }
 }
 
-async fn wait_for_confirmation(
+pub async fn wait_for_confirmation(
     rpc: &SolanaRpcClient,
     signature: &str,
     wallet: &PublicKeyBytes,
