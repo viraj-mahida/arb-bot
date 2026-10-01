@@ -47,7 +47,7 @@ The send was Raydium 1bp (`8sLb`) → Raydium 4bp (`3ucN`), cut to 0.05 SOL by `
 
 - The 0.05 SOL cap is what made the sent trade tiny. Raising it only helps if the wallet or a loan can fund the new size. Leave room for the signature, the tip, and a one-time USDC token-account rent.
 - `FUNDING_MODE=wallet`. A flash loan is what removes the wallet-balance ceiling. It does not remove `MAX_TRADE_INPUT_LAMPORTS`.
-- The old `FLASH_LOAN_FEE_BPS` default of 10 was wrong: the Kamino reserve fee is 1 bp, and the default is now 1. At 1 bp, the uncapped 1.2829 SOL Raydium → Raydium quote nets about **+0.000344 SOL** after the loan fee, the signature, and the 10,000 lamport tip. At 10 bp that same quote is a loss. The 99.53 SOL quote at 1 bp nets about **+0.0167 SOL** before a competitive tip. Re-check the reserve before trusting the constant.
+- The old shared `FLASH_LOAN_FEE_BPS` default of 10 was wrong: the Kamino reserve fee is 1 bp, and `KAMINO_FLASH_LOAN_FEE_BPS` now defaults to 1. At 1 bp, the uncapped 1.2829 SOL Raydium → Raydium quote nets about **+0.000344 SOL** after the loan fee, the signature, and the 10,000 lamport tip. At 10 bp that same quote is a loss. The 99.53 SOL quote at 1 bp nets about **+0.0167 SOL** before a competitive tip. Re-check the reserve before trusting the constant.
 - Flash mode still needs `KAMINO_LENDING_MARKET`, `KAMINO_SOL_RESERVE`, and an address lookup table (`ADDRESS_LOOKUP_TABLES` is empty). Without the table the flash-loan transaction is likely too big.
 
 ## Order to do this
@@ -56,4 +56,4 @@ The send was Raydium 1bp (`8sLb`) → Raydium 4bp (`3ucN`), cut to 0.05 SOL by `
 2. Cached blockhash, regional Jito, closer RPC and Geyser.
 3. Tip taken from expected profit.
 4. Stop holding the in-flight lock across the confirm poll.
-5. Set `FLASH_LOAN_FEE_BPS` to the reserve's real fee, then turn on flash mode with the Kamino accounts and a lookup table, and only then raise `MAX_TRADE_INPUT_LAMPORTS`.
+5. Set `KAMINO_FLASH_LOAN_FEE_BPS` to the reserve's real fee, then turn on flash mode with the Kamino accounts and a lookup table, and only then raise `MAX_TRADE_INPUT_LAMPORTS`.

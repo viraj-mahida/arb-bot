@@ -23,7 +23,7 @@ use solana_pubkey::Pubkey;
 
 use super::assemble_arbitrage_transaction::compile_and_sign_v0_transaction;
 use super::compute_budget_instructions::set_compute_unit_price;
-use super::flash_loan_instructions::JupiterFlashLoanAccounts;
+use super::flash_loan_instructions::{JupiterFlashLoanAccounts, KaminoFlashLoanAccounts};
 use super::jito_tip_instruction::default_jito_tip_accounts;
 use super::orca_whirlpool_swap_instruction::orca_oracle_address;
 use super::trading_wallet::TradingWallet;
@@ -34,7 +34,7 @@ use super::well_known_program_addresses::{
     WRAPPED_SOL_MINT_ADDRESS, program, pubkey,
 };
 use crate::bot_settings::{BotSettingsFromEnvironment, FlashLoanLender, FundingMode};
-use crate::solana_connections::SolanaRpcClient;
+use crate::solana_connections::{AccountDataAtSlot, SolanaRpcClient};
 use crate::step_2_decode_account_bytes::main_decode_pool_account;
 use crate::step_3_store_latest_pool_state::{
     DexSpecificSwapAccounts, PublicKeyBytes, WatchedPools, encode_public_key_as_base58,
@@ -128,51 +128,77 @@ async fn collect_addresses(
     }
     default_jito_tip_accounts().into_iter().for_each(&mut add);
 
+    let watched_pools = WatchedPools::sol_usdc_pools();
+    let pool_configs = watched_pools.all_configs();
+    // Optional flash-loan account first, then every pool, so one
+    // getMultipleAccounts covers the whole read.
+    let flash_loan_account = match &settings.funding_mode {
+        FundingMode::OwnWallet => None,
+        FundingMode::FlashLoan(flash) => Some(match &flash.lender {
+            FlashLoanLender::Jupiter => JupiterFlashLoanAccounts::flashloan_admin_address(),
+            FlashLoanLender::Kamino {
+                sol_reserve_address,
+                ..
+            } => *sol_reserve_address,
+        }),
+    };
+    let mut accounts_to_read = Vec::with_capacity(pool_configs.len() + 1);
+    if let Some(address) = flash_loan_account {
+        accounts_to_read.push(address);
+    }
+    accounts_to_read.extend(pool_configs.iter().map(|config| config.pool_address));
+
+    let mut fetched = rpc.get_multiple_accounts(&accounts_to_read).await?;
+    let pool_accounts = if flash_loan_account.is_some() {
+        fetched.split_off(1)
+    } else {
+        std::mem::take(&mut fetched)
+    };
+
     if let FundingMode::FlashLoan(flash) = &settings.funding_mode {
-        if matches!(flash.lender, FlashLoanLender::Jupiter) {
-            let admin_address = JupiterFlashLoanAccounts::flashloan_admin_address();
-            let admin_bytes = fetch_account(rpc, admin_address).await?;
-            let jupiter = JupiterFlashLoanAccounts::from_admin_account_bytes(&admin_bytes)?;
-            for address in [
-                jupiter.flashloan_admin,
-                jupiter.token_reserve,
-                jupiter.borrow_position,
-                jupiter.rate_model,
-                jupiter.liquidity,
-                jupiter.vault,
-                parse_base58_public_key(JUPITER_LIQUIDITY_PROGRAM_ADDRESS),
-                parse_base58_public_key(JUPITER_FLASHLOAN_PROGRAM_ADDRESS),
-            ] {
-                add(address);
+        let address =
+            flash_loan_account.ok_or("flash-loan account was not included in the read")?;
+        let account_bytes = account_bytes(fetched.into_iter().next().flatten(), &address)?;
+        match &flash.lender {
+            FlashLoanLender::Jupiter => {
+                let jupiter = JupiterFlashLoanAccounts::from_admin_account_bytes(&account_bytes)?;
+                for address in [
+                    jupiter.flashloan_admin,
+                    jupiter.token_reserve,
+                    jupiter.borrow_position,
+                    jupiter.rate_model,
+                    jupiter.liquidity,
+                    jupiter.vault,
+                    parse_base58_public_key(JUPITER_LIQUIDITY_PROGRAM_ADDRESS),
+                    parse_base58_public_key(JUPITER_FLASHLOAN_PROGRAM_ADDRESS),
+                ] {
+                    add(address);
+                }
             }
-        }
-        // Kamino: its accounts come from the reserve; add them the same way if you use it.
-        if let FlashLoanLender::Kamino {
-            lending_market_address,
-            sol_reserve_address,
-        } = &flash.lender
-        {
-            let reserve_bytes = fetch_account(rpc, *sol_reserve_address).await?;
-            let kamino =
-                super::flash_loan_instructions::KaminoFlashLoanAccounts::from_reserve_account_bytes(
+            FlashLoanLender::Kamino {
+                lending_market_address,
+                sol_reserve_address,
+            } => {
+                let kamino = KaminoFlashLoanAccounts::from_reserve_account_bytes(
                     *lending_market_address,
                     *sol_reserve_address,
-                    &reserve_bytes,
+                    &account_bytes,
                 )?;
-            for address in [
-                kamino.lending_market,
-                kamino.lending_market_authority,
-                kamino.reserve,
-                kamino.reserve_supply_vault,
-                kamino.reserve_fee_vault,
-            ] {
-                add(address);
+                for address in [
+                    kamino.lending_market,
+                    kamino.lending_market_authority,
+                    kamino.reserve,
+                    kamino.reserve_supply_vault,
+                    kamino.reserve_fee_vault,
+                ] {
+                    add(address);
+                }
             }
         }
     }
 
-    for pool_config in WatchedPools::sol_usdc_pools().all_configs() {
-        let pool_bytes = fetch_account(rpc, pool_config.pool_address).await?;
+    for (pool_config, maybe_account) in pool_configs.iter().zip(pool_accounts) {
+        let pool_bytes = account_bytes(maybe_account, &pool_config.pool_address)?;
         let pool = main_decode_pool_account(pool_config, &pool_bytes, 0, 0)
             .ok_or_else(|| format!("could not decode pool {}", pool_config.pool_address_base58))?;
         for address in [
@@ -204,19 +230,13 @@ async fn collect_addresses(
     Ok(addresses)
 }
 
-async fn fetch_account(rpc: &SolanaRpcClient, address: PublicKeyBytes) -> Result<Vec<u8>, String> {
-    rpc.get_multiple_accounts(&[address])
-        .await?
-        .into_iter()
-        .next()
-        .flatten()
+fn account_bytes(
+    maybe_account: Option<AccountDataAtSlot>,
+    address: &PublicKeyBytes,
+) -> Result<Vec<u8>, String> {
+    maybe_account
         .map(|account| account.account_data)
-        .ok_or_else(|| {
-            format!(
-                "account {} not found",
-                encode_public_key_as_base58(&address)
-            )
-        })
+        .ok_or_else(|| format!("account {} not found", encode_public_key_as_base58(address)))
 }
 
 /// `CreateLookupTable { recent_slot, bump_seed }` (instruction 0).
@@ -283,6 +303,7 @@ async fn send_and_wait(
     let transaction = compile_and_sign_v0_transaction(wallet, &instructions, &[], blockhash)?;
     let signature = rpc.send_transaction(&transaction.wire_bytes).await?;
     println!("[alt] sent {signature}");
+
     for _ in 0..60 {
         tokio::time::sleep(Duration::from_millis(1_000)).await;
         if let Ok(Some(status)) = rpc.get_signature_status(&signature).await {
@@ -296,6 +317,7 @@ async fn send_and_wait(
             }
         }
     }
+    
     Err(format!(
         "lookup-table transaction {signature} was not confirmed in 60 s; re-run"
     ))

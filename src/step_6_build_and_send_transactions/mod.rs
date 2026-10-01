@@ -31,7 +31,7 @@
 //! **Current limitations:**
 //! - Both tokens are assumed to use the classic token program (true for SOL and USDC).
 //! - Raydium's tick-array bitmap extension account is not passed (only needed far from the current price).
-//! - The flash-loan fee is estimated from `FLASH_LOAN_FEE_BPS`, not read from the reserve.
+//! - The flash-loan fee is estimated from `JUPITER_FLASH_LOAN_FEE_BPS` or `KAMINO_FLASH_LOAN_FEE_BPS`, not read from the reserve.
 //! - Flash-loan transactions usually need an address lookup table to fit in 1,232 bytes.
 //!
 //! **Folder layout:** `functions/` holds instruction builders. Pipeline files

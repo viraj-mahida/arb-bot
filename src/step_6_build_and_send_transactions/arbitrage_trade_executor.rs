@@ -98,13 +98,13 @@ impl ArbitrageTradeExecutor {
                             .await?;
                     let accounts =
                         JupiterFlashLoanAccounts::from_admin_account_bytes(&admin_bytes)?;
-                    // The cost model was built from FLASH_LOAN_FEE_BPS; a higher live fee
-                    // would make every profit estimate too optimistic.
+                    // The cost model was built from JUPITER_FLASH_LOAN_FEE_BPS; a higher
+                    // live fee would make every profit estimate too optimistic.
                     if u64::from(accounts.fee_in_basis_points)
                         > flash.flash_loan_fee_in_basis_points
                     {
                         return Err(format!(
-                            "Jupiter flash-loan fee is now {} bps; set FLASH_LOAN_FEE_BPS to at least that",
+                            "Jupiter flash-loan fee is now {} bps; set JUPITER_FLASH_LOAN_FEE_BPS to at least that",
                             accounts.fee_in_basis_points
                         ));
                     }

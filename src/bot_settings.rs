@@ -25,7 +25,8 @@
 //! | `FLASH_LOAN_PROVIDER`               | `jupiter`                               | `jupiter` or `kamino` (only when `FUNDING_MODE=flash_loan`) |
 //! | `KAMINO_LENDING_MARKET`             | *(required for `kamino`)*               | Kamino lending market that owns the reserve |
 //! | `KAMINO_SOL_RESERVE`                | *(required for `kamino`)*               | Kamino reserve that lends wrapped SOL |
-//! | `FLASH_LOAN_FEE_BPS`                | `0` jupiter, `1` kamino                 | Flash-loan fee used in the cost estimate; Jupiter's live fee is checked against it at startup |
+//! | `JUPITER_FLASH_LOAN_FEE_BPS`        | `0`                                     | Jupiter fee used in the cost estimate; the live fee is checked against it at startup |
+//! | `KAMINO_FLASH_LOAN_FEE_BPS`         | `1`                                     | Kamino fee used in the cost estimate |
 //! | `ADDRESS_LOOKUP_TABLES`             | *(empty)*                               | Comma-separated lookup-table addresses to shrink transactions |
 
 use crate::step_3_store_latest_pool_state::{PublicKeyBytes, parse_base58_public_key};
@@ -99,14 +100,14 @@ impl BotSettingsFromEnvironment {
             Some("flash_loan") => match read_text("FLASH_LOAN_PROVIDER").as_deref() {
                 None | Some("jupiter") => FundingMode::FlashLoan(FlashLoanSettings {
                     lender: FlashLoanLender::Jupiter,
-                    flash_loan_fee_in_basis_points: read_number("FLASH_LOAN_FEE_BPS", 0),
+                    flash_loan_fee_in_basis_points: read_number("JUPITER_FLASH_LOAN_FEE_BPS", 0),
                 }),
                 Some("kamino") => FundingMode::FlashLoan(FlashLoanSettings {
                     lender: FlashLoanLender::Kamino {
                         lending_market_address: read_required_public_key("KAMINO_LENDING_MARKET"),
                         sol_reserve_address: read_required_public_key("KAMINO_SOL_RESERVE"),
                     },
-                    flash_loan_fee_in_basis_points: read_number("FLASH_LOAN_FEE_BPS", 1),
+                    flash_loan_fee_in_basis_points: read_number("KAMINO_FLASH_LOAN_FEE_BPS", 1),
                 }),
                 Some(other) => {
                     panic!("FLASH_LOAN_PROVIDER must be 'jupiter' or 'kamino', got '{other}'")
