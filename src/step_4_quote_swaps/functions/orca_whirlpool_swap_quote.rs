@@ -19,7 +19,7 @@ const MAXIMUM_TICK_ARRAYS_ORCA_ACCEPTS: usize = 6;
 
 pub(crate) fn quote_orca_whirlpool_swap(
     pool: &ConcentratedLiquidityPoolState,
-    cached_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    cached_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
     input_amount: u64,
     direction: SwapDirection,
 ) -> Result<SwapQuoteForExactInput, WhySwapQuoteFailed> {
@@ -63,7 +63,7 @@ pub(crate) fn quote_orca_whirlpool_swap(
 /// not exist on-chain — nobody placed liquidity there), we insert an empty one.
 fn contiguous_orca_tick_array_facades(
     pool: &ConcentratedLiquidityPoolState,
-    cached_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    cached_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
 ) -> Result<Vec<TickArrayFacade>, WhySwapQuoteFailed> {
     let ticks_covered_by_one_array = (TICK_ARRAY_SIZE as i32) * i32::from(pool.tick_spacing);
     if ticks_covered_by_one_array == 0 {
@@ -75,7 +75,7 @@ fn contiguous_orca_tick_array_facades(
         &TickArrayAccountWithInitializedTicks,
     > = cached_tick_arrays
         .iter()
-        .map(|tick_array| (tick_array.start_tick_index, tick_array))
+        .map(|tick_array| (tick_array.start_tick_index, *tick_array))
         .collect();
     let lowest_start = *tick_array_by_start_tick
         .keys()

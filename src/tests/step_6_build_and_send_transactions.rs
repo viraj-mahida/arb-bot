@@ -10,6 +10,7 @@ use crate::step_3_store_latest_pool_state::known_program_and_pool_addresses::{
 };
 use crate::step_3_store_latest_pool_state::{DexProgram, parse_base58_public_key};
 use crate::step_4_quote_swaps::SwapDirection;
+use crate::step_5_find_best_arbitrage_size::main_quote_most_profitable_two_pool_round_trip;
 use crate::step_6_build_and_send_transactions::assemble_arbitrage_transaction::{
     FundingSource, MAX_TRANSACTION_SIZE_IN_BYTES, TransactionFeeSettings,
     compile_and_sign_v0_transaction, main_arbitrage_instructions,
@@ -17,7 +18,7 @@ use crate::step_6_build_and_send_transactions::assemble_arbitrage_transaction::{
 use crate::step_6_build_and_send_transactions::decide_if_trade_is_worth_it::{
     ApprovedArbitrageTrade, CacheFreshness, TradeDecisionRules, WhyTradeWasSkipped,
     check_cache_is_fresh, costs_of_primary_send_route, estimate_transaction_costs,
-    main_decide_if_trade_is_worth_it,
+    main_decide_from_quoted_round_trip, main_decide_if_trade_is_worth_it,
 };
 use crate::step_6_build_and_send_transactions::flash_loan_instructions::{
     FlashLoanProvider, JUPITER_BORROW_DISCRIMINATOR, JUPITER_PAYBACK_DISCRIMINATOR,
@@ -70,9 +71,9 @@ fn profitable_trade(rules: &TradeDecisionRules) -> ApprovedArbitrageTrade {
     raydium_tick_array.pool_address = raydium.pool_address;
     main_decide_if_trade_is_worth_it(
         &orca,
-        &[orca_tick_array],
+        &[&orca_tick_array],
         &raydium,
-        &[raydium_tick_array],
+        &[&raydium_tick_array],
         fresh_cache(),
         rules,
     )
@@ -155,6 +156,69 @@ fn stale_data_is_refused() {
     assert!(check_cache_is_fresh(&[&pool], fresh_cache(), &rules).is_ok());
 }
 
+/// The hot path decides from the round trip already quoted for the log.
+#[test]
+fn precomputed_round_trip_matches_a_fresh_decision() {
+    let rules = test_rules();
+    let (orca, orca_tick_array) =
+        test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 100);
+    let (mut raydium, mut raydium_tick_array) =
+        test_pool_at_tick_with_one_empty_tick_array(DexProgram::RaydiumClmm, DEEP_LIQUIDITY, 0);
+    raydium.pool_address = [9u8; 32];
+    raydium_tick_array.pool_address = raydium.pool_address;
+
+    let fresh = main_decide_if_trade_is_worth_it(
+        &orca,
+        &[&orca_tick_array],
+        &raydium,
+        &[&raydium_tick_array],
+        fresh_cache(),
+        &rules,
+    )
+    .expect("a 1% gap with deep liquidity should be approved");
+    let round_trip = main_quote_most_profitable_two_pool_round_trip(
+        &orca,
+        &[&orca_tick_array],
+        &raydium,
+        &[&raydium_tick_array],
+    )
+    .expect("the same pools quote");
+    let from_quote = main_decide_from_quoted_round_trip(
+        &orca,
+        &[&orca_tick_array],
+        &raydium,
+        &[&raydium_tick_array],
+        round_trip,
+        fresh_cache(),
+        &rules,
+    )
+    .expect("the precomputed round trip should be approved");
+
+    assert_eq!(
+        from_quote.start_token_amount_in,
+        fresh.start_token_amount_in
+    );
+    assert_eq!(
+        from_quote.expected_start_token_out,
+        fresh.expected_start_token_out
+    );
+    assert_eq!(
+        from_quote.expected_profit_after_costs,
+        fresh.expected_profit_after_costs
+    );
+    assert_eq!(
+        from_quote.leg_1_minimum_bridge_token_out,
+        fresh.leg_1_minimum_bridge_token_out
+    );
+    assert_eq!(
+        from_quote.leg_2_minimum_start_token_out,
+        fresh.leg_2_minimum_start_token_out
+    );
+    assert_eq!(from_quote.best_size_lamports, fresh.best_size_lamports);
+    assert_eq!(from_quote.size_was_capped, fresh.size_was_capped);
+    assert_eq!(from_quote.costs, fresh.costs);
+}
+
 /// Same price on both pools: fees alone make the round trip lose, so no trade.
 #[test]
 fn equal_prices_are_not_traded() {
@@ -164,9 +228,9 @@ fn equal_prices_are_not_traded() {
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::RaydiumClmm, DEEP_LIQUIDITY, 0);
     let decision = main_decide_if_trade_is_worth_it(
         &orca,
-        &[orca_tick_array],
+        &[&orca_tick_array],
         &raydium,
-        &[raydium_tick_array],
+        &[&raydium_tick_array],
         fresh_cache(),
         &test_rules(),
     );

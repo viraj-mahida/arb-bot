@@ -18,7 +18,7 @@ use crate::step_3_store_latest_pool_state::{
 /// How much output a swap of `input_amount` would return on `pool`.
 pub fn main_quote_swap_exact_input(
     pool: &ConcentratedLiquidityPoolState,
-    cached_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    cached_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
     input_amount: u64,
     direction: SwapDirection,
 ) -> Result<SwapQuoteForExactInput, WhySwapQuoteFailed> {

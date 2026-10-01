@@ -1,6 +1,53 @@
 //! What the bot prints once at startup and while connecting.
+//!
+//! `ignr_` functions are the only startup hooks the bot loop should call for
+//! logs and the visualizer. Their bodies stay here.
 
+use crate::bot_settings::{BotSettingsFromEnvironment, FundingMode};
 use crate::step_3_store_latest_pool_state::WatchedPools;
+use crate::step_6_build_and_send_transactions::decide_if_trade_is_worth_it::{
+    TradeDecisionRules, costs_of_primary_send_route,
+};
+
+/// Log file plus the visualizer socket. Call once, before any other line.
+pub fn ignr_start() {
+    super::output::start_copying_to_file();
+    crate::dashboard_events::install();
+}
+
+/// `DEMO_PRICE_SHIFT_BPS` changes quoted prices only. Sending must stay off.
+pub fn ignr_block_sends_during_demo_price_shift(settings: &mut BotSettingsFromEnvironment) {
+    let demo_bps = crate::dashboard_events::demo_price_shift_bps();
+    if demo_bps > 0 {
+        settings.send_real_transactions = false;
+        settings.simulate_on_rpc_before_sending = true;
+        demo_scenario(demo_bps);
+    }
+    let funding = match settings.funding_mode {
+        FundingMode::OwnWallet => "wallet",
+        FundingMode::FlashLoan(_) => "flash_loan",
+    };
+    crate::dashboard_events::status(
+        settings.send_real_transactions,
+        settings.simulate_on_rpc_before_sending,
+        funding,
+        None,
+        None,
+    );
+}
+
+/// Fee figures for the visualizer's laptop. Not read when a trade is approved.
+pub fn ignr_remember_dashboard_route_costs(settings: &BotSettingsFromEnvironment) {
+    let rules = TradeDecisionRules::from_settings(settings);
+    let primary_route = costs_of_primary_send_route(&rules, 0);
+    crate::dashboard_events::remember_primary_route_costs(
+        primary_route.network_signature_fee,
+        primary_route.priority_fee,
+        primary_route.jito_tip,
+        rules.flash_loan_fee_in_basis_points,
+        rules.min_profit_after_costs_lamports,
+    );
+}
 
 pub fn startup_banner(watched_pools: &WatchedPools) {
     log_line!(

@@ -1,3 +1,4 @@
+use super::PROBE_TRADE_INPUT_AMOUNT;
 use super::test_pool_builders::{
     DEEP_LIQUIDITY, test_pool_at_tick_with_one_empty_tick_array,
     test_pool_with_one_empty_tick_array,
@@ -5,7 +6,7 @@ use super::test_pool_builders::{
 use crate::step_3_store_latest_pool_state::{
     DexProgram, InitializedTickWithLiquidityChange, LatestPoolStateCache,
 };
-use crate::step_4_quote_swaps::{PROBE_TRADE_INPUT_AMOUNT, WhySwapQuoteFailed};
+use crate::step_4_quote_swaps::WhySwapQuoteFailed;
 use crate::step_5_find_best_arbitrage_size::{
     main_find_input_amount_that_maximizes_profit, main_quote_most_profitable_two_pool_round_trip,
     main_quote_round_trips_touching_pool,
@@ -16,7 +17,7 @@ use crate::step_5_find_best_arbitrage_size::{
 fn no_arbitrage_when_both_pools_have_the_same_price() {
     let (pool, tick_array) =
         test_pool_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY);
-    let tick_arrays = [tick_array];
+    let tick_arrays = [&tick_array];
     let error =
         main_quote_most_profitable_two_pool_round_trip(&pool, &tick_arrays, &pool, &tick_arrays)
             .unwrap_err();
@@ -40,9 +41,9 @@ fn no_arbitrage_when_fees_are_bigger_than_the_price_gap() {
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 16);
     let error = main_quote_most_profitable_two_pool_round_trip(
         &sell_pool,
-        &[sell_tick_array],
+        &[&sell_tick_array],
         &buy_pool,
-        &[buy_tick_array],
+        &[&buy_tick_array],
     )
     .unwrap_err();
     assert!(matches!(
@@ -60,9 +61,9 @@ fn wide_price_gap_gives_profitable_size_larger_than_probe() {
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 16);
     let best = main_quote_most_profitable_two_pool_round_trip(
         &sell_pool,
-        &[sell_tick_array],
+        &[&sell_tick_array],
         &buy_pool,
-        &[buy_tick_array],
+        &[&buy_tick_array],
     )
     .unwrap();
     assert!(best.both_swaps_fully_filled);
@@ -79,9 +80,9 @@ fn trade_size_stops_where_liquidity_runs_out_at_a_tick() {
         test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, DEEP_LIQUIDITY, 16);
     let size_without_tick = main_find_input_amount_that_maximizes_profit(
         &sell_pool,
-        std::slice::from_ref(&sell_tick_array),
+        &[&sell_tick_array],
         &buy_pool,
-        std::slice::from_ref(&buy_tick_array),
+        &[&buy_tick_array],
     )
     .unwrap();
 
@@ -95,9 +96,9 @@ fn trade_size_stops_where_liquidity_runs_out_at_a_tick() {
         });
     let size_with_tick = main_find_input_amount_that_maximizes_profit(
         &sell_pool,
-        &[sell_tick_array],
+        &[&sell_tick_array],
         &buy_pool,
-        &[buy_tick_array],
+        &[&buy_tick_array],
     )
     .unwrap();
     assert!(size_with_tick > 0);
@@ -116,7 +117,7 @@ fn trade_sizing_fails_when_current_tick_array_is_missing() {
             tick_index: tick_array.start_tick_index,
             liquidity_added_when_price_crosses_upward: 1,
         });
-    let tick_arrays = [tick_array];
+    let tick_arrays = [&tick_array];
     let error =
         main_quote_most_profitable_two_pool_round_trip(&pool, &tick_arrays, &pool, &tick_arrays)
             .unwrap_err();

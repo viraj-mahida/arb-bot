@@ -10,6 +10,8 @@
 //! Same cycle, other way round: "buy cheap on B, sell dear on S" is the same
 //! trade started from USDC instead of SOL. We start from SOL (token A).
 
+use std::sync::Arc;
+
 use super::quote_swap_exact_input::main_quote_swap_exact_input;
 use super::swap_quote_types::{
     DirectedRoundTripQuote, SwapDirection, TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed,
@@ -23,9 +25,9 @@ use crate::step_3_store_latest_pool_state::{
 /// swapping all the token B received back into token A on `buy_pool`.
 pub fn main_quote_two_pool_round_trip(
     sell_pool: &ConcentratedLiquidityPoolState,
-    sell_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    sell_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
     buy_pool: &ConcentratedLiquidityPoolState,
-    buy_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    buy_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
     start_token_amount_in: u64,
 ) -> Result<TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed> {
     let sell_leg = main_quote_swap_exact_input(
@@ -51,21 +53,28 @@ pub fn main_quote_two_pool_round_trip(
 
 /// One cached pool plus the tick arrays cached for it.
 pub(crate) struct CachedPoolWithTickArrays {
-    pub pool: ConcentratedLiquidityPoolState,
-    pub tick_arrays: Vec<TickArrayAccountWithInitializedTicks>,
+    pub pool: Arc<ConcentratedLiquidityPoolState>,
+    pub tick_arrays: Vec<Arc<TickArrayAccountWithInitializedTicks>>,
 }
 
 impl CachedPoolWithTickArrays {
     pub(crate) fn from_cache(
         cache: &LatestPoolStateCache,
-        pool: ConcentratedLiquidityPoolState,
+        pool: Arc<ConcentratedLiquidityPoolState>,
     ) -> Self {
-        let pool = crate::dashboard_events::with_demo_price_shift(pool);
+        // ignr: demo quote copy only (`DEMO_PRICE_SHIFT_BPS`). No-op otherwise; cache is not written.
+        let pool = crate::dashboard_events::ignr_share_or_shift_pool(pool);
         Self {
             tick_arrays: cache.tick_arrays_for_pool(&pool.pool_address),
             pool,
         }
     }
+}
+
+fn tick_array_refs(
+    tick_arrays: &[Arc<TickArrayAccountWithInitializedTicks>],
+) -> Vec<&TickArrayAccountWithInitializedTicks> {
+    tick_arrays.iter().map(Arc::as_ref).collect()
 }
 
 /// Quote `updated_pool` against `other_pool` in both sell→buy directions.
@@ -75,16 +84,22 @@ pub(crate) fn quote_both_directions(
     other_pool: &CachedPoolWithTickArrays,
     mut quote: impl FnMut(
         &ConcentratedLiquidityPoolState,
-        &[TickArrayAccountWithInitializedTicks],
+        &[&TickArrayAccountWithInitializedTicks],
         &ConcentratedLiquidityPoolState,
-        &[TickArrayAccountWithInitializedTicks],
+        &[&TickArrayAccountWithInitializedTicks],
     ) -> Result<TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed>,
 ) -> [DirectedRoundTripQuote; 2] {
     [(updated_pool, other_pool), (other_pool, updated_pool)].map(|(sell, buy)| {
+        let sell_tick_arrays = tick_array_refs(&sell.tick_arrays);
+        let buy_tick_arrays = tick_array_refs(&buy.tick_arrays);
         DirectedRoundTripQuote {
             sell_pool_label: pool_label(&sell.pool),
             buy_pool_label: pool_label(&buy.pool),
-            result: quote(&sell.pool, &sell.tick_arrays, &buy.pool, &buy.tick_arrays),
+            result: quote(&sell.pool, &sell_tick_arrays, &buy.pool, &buy_tick_arrays),
+            sell_pool: Arc::clone(&sell.pool),
+            sell_pool_tick_arrays: sell.tick_arrays.clone(),
+            buy_pool: Arc::clone(&buy.pool),
+            buy_pool_tick_arrays: buy.tick_arrays.clone(),
         }
     })
 }

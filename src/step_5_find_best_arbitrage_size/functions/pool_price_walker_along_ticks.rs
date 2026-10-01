@@ -40,7 +40,7 @@ pub(crate) struct NextTickBoundary {
 impl PoolPriceWalkerAlongTicks {
     pub(crate) fn new(
         pool: &ConcentratedLiquidityPoolState,
-        cached_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+        cached_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
     ) -> Result<Self, WhySwapQuoteFailed> {
         if cached_tick_arrays.is_empty() {
             return Err(WhySwapQuoteFailed::NoTickArraysCachedYet);

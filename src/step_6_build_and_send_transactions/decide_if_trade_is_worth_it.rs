@@ -27,29 +27,75 @@ use crate::step_3_store_latest_pool_state::{
     ConcentratedLiquidityPoolState, DexProgram, TickArrayAccountWithInitializedTicks,
 };
 use crate::step_4_quote_swaps::{
-    SwapDirection, WhySwapQuoteFailed, main_quote_swap_exact_input, main_quote_two_pool_round_trip,
+    SwapDirection, TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed, main_quote_swap_exact_input,
+    main_quote_two_pool_round_trip,
 };
 use crate::step_5_find_best_arbitrage_size::main_quote_most_profitable_two_pool_round_trip;
 
 /// Run every check and, if they all pass, return the exact trade to build.
 ///
 /// Leg 1 sells SOL on `sell_pool`; leg 2 buys SOL back on `buy_pool`.
+///
+/// The live loop does not call this. It quotes once for the log, then calls
+/// [`main_decide_from_quoted_round_trip`]. Tests call this to quote and decide together.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn main_decide_if_trade_is_worth_it(
     sell_pool: &ConcentratedLiquidityPoolState,
-    sell_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    sell_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
     buy_pool: &ConcentratedLiquidityPoolState,
-    buy_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    buy_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
     freshness: CacheFreshness,
     rules: &TradeDecisionRules,
 ) -> Result<ApprovedArbitrageTrade, WhyTradeWasSkipped> {
     check_cache_is_fresh(&[sell_pool, buy_pool], freshness, rules)?;
-
-    let mut round_trip = main_quote_most_profitable_two_pool_round_trip(
+    let round_trip = main_quote_most_profitable_two_pool_round_trip(
         sell_pool,
         sell_pool_tick_arrays,
         buy_pool,
         buy_pool_tick_arrays,
     )?;
+    approve_quoted_round_trip(
+        sell_pool,
+        sell_pool_tick_arrays,
+        buy_pool,
+        buy_pool_tick_arrays,
+        round_trip,
+        rules,
+    )
+}
+
+/// Same cost, cap, and slippage checks as [`main_decide_if_trade_is_worth_it`],
+/// using a round trip already quoted for this pool update.
+///
+/// Skips the tick-book walk. Still refuses a stale cache before looking at the quote.
+pub fn main_decide_from_quoted_round_trip(
+    sell_pool: &ConcentratedLiquidityPoolState,
+    sell_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
+    buy_pool: &ConcentratedLiquidityPoolState,
+    buy_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
+    round_trip: TwoPoolArbitrageRoundTrip,
+    freshness: CacheFreshness,
+    rules: &TradeDecisionRules,
+) -> Result<ApprovedArbitrageTrade, WhyTradeWasSkipped> {
+    check_cache_is_fresh(&[sell_pool, buy_pool], freshness, rules)?;
+    approve_quoted_round_trip(
+        sell_pool,
+        sell_pool_tick_arrays,
+        buy_pool,
+        buy_pool_tick_arrays,
+        round_trip,
+        rules,
+    )
+}
+
+fn approve_quoted_round_trip(
+    sell_pool: &ConcentratedLiquidityPoolState,
+    sell_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
+    buy_pool: &ConcentratedLiquidityPoolState,
+    buy_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
+    mut round_trip: TwoPoolArbitrageRoundTrip,
+    rules: &TradeDecisionRules,
+) -> Result<ApprovedArbitrageTrade, WhyTradeWasSkipped> {
     // Kept after the cap re-quote so a send log can still show the size Step 5 picked.
     let best_size_lamports = round_trip.start_token_amount_in;
     let best_size_pool_profit_lamports = round_trip.profit_in_start_token();
@@ -101,9 +147,15 @@ pub fn main_decide_if_trade_is_worth_it(
 
     Ok(ApprovedArbitrageTrade {
         sell_pool: sell_pool.clone(),
-        sell_pool_tick_arrays: sell_pool_tick_arrays.to_vec(),
+        sell_pool_tick_arrays: sell_pool_tick_arrays
+            .iter()
+            .map(|ticks| (*ticks).clone())
+            .collect(),
         buy_pool: buy_pool.clone(),
-        buy_pool_tick_arrays: buy_pool_tick_arrays.to_vec(),
+        buy_pool_tick_arrays: buy_pool_tick_arrays
+            .iter()
+            .map(|ticks| (*ticks).clone())
+            .collect(),
         start_token_amount_in: round_trip.start_token_amount_in,
         leg_1_minimum_bridge_token_out,
         leg_2_bridge_token_amount_in: leg_1_minimum_bridge_token_out,

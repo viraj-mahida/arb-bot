@@ -2,8 +2,12 @@
 //!
 //! Formatting only. The quotes themselves are produced by Steps 4 and 5.
 
+use crate::step_3_store_latest_pool_state::{
+    ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks,
+};
 use crate::step_4_quote_swaps::{
     DirectedRoundTripQuote, TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed,
+    main_quote_two_pool_round_trip, pool_label,
 };
 use crate::step_5_find_best_arbitrage_size::RoundTripQuotesTouchingPool;
 
@@ -56,4 +60,47 @@ fn print_successful_round_trip(
         round_trip.profit_in_start_token() > 0,
         !round_trip.both_swaps_fully_filled,
     );
+}
+
+/// A few exact quotes around the best size, for the visualizer's profit curve.
+///
+/// No-op unless the dashboard is on, and then at most once every two seconds.
+pub fn ignr_sample_profit_curve(
+    sell_pool: &ConcentratedLiquidityPoolState,
+    sell_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
+    buy_pool: &ConcentratedLiquidityPoolState,
+    buy_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
+    best_input_amount: u64,
+) {
+    if !crate::dashboard_events::curve_sample_due() {
+        return;
+    }
+    const FRACTIONS: [f64; 6] = [0.2, 0.4, 0.6, 0.8, 1.0, 1.35];
+    let mut points = Vec::with_capacity(FRACTIONS.len());
+    for fraction in FRACTIONS {
+        let size = ((best_input_amount as f64) * fraction) as u64;
+        if size == 0 {
+            continue;
+        }
+        let Ok(round_trip) = main_quote_two_pool_round_trip(
+            sell_pool,
+            sell_pool_tick_arrays,
+            buy_pool,
+            buy_pool_tick_arrays,
+            size,
+        ) else {
+            continue;
+        };
+        points.push((
+            round_trip.start_token_amount_in as f64 / LAMPORTS_PER_SOL,
+            round_trip.profit_in_start_token() as f64 / LAMPORTS_PER_SOL,
+        ));
+    }
+    if !points.is_empty() {
+        crate::dashboard_events::profit_curve(
+            &points,
+            &pool_label(sell_pool),
+            &pool_label(buy_pool),
+        );
+    }
 }

@@ -11,9 +11,11 @@ pub fn pool_account_updated(
     loaded_tick_array_count: usize,
     watched_tick_array_count: usize,
 ) {
+    // Demo shift matches the spread line and the quote. The caller's pool is unchanged.
+    let pool = crate::dashboard_events::ignr_with_demo_price_shift(pool.clone());
     log_line!(
         "[pool]    {:<22}  price {:.4} USDC/SOL  tick {}  slot {}  tick arrays loaded {}/{}",
-        pool_label(pool),
+        pool_label(&pool),
         pool.human_readable_price_token_b_per_token_a(),
         pool.current_tick_index,
         pool.slot,
@@ -26,7 +28,7 @@ pub fn pool_account_updated(
         "pool",
         &format!(
             "POOL {}  {:.0}bp  price {:.4}  tick {}  liq {}  slot {}",
-            pool_label(pool),
+            pool_label(&pool),
             f64::from(pool.fee_rate_in_millionths) / 100.0,
             pool.human_readable_price_token_b_per_token_a(),
             pool.current_tick_index,

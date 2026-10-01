@@ -1,6 +1,7 @@
 //! Lines printed by Step 6: setup, decision, simulation, sending.
 
 use crate::bot_settings::{BotSettingsFromEnvironment, FundingMode};
+use crate::solana_connections::SolanaRpcClient;
 use crate::step_3_store_latest_pool_state::{PublicKeyBytes, encode_public_key_as_base58};
 use crate::step_4_quote_swaps::pool_label;
 use crate::step_6_build_and_send_transactions::{ApprovedArbitrageTrade, WhyTradeWasSkipped};
@@ -11,6 +12,21 @@ const SIMULATION_LOG_LINES_TO_SHOW: usize = 8;
 
 fn sol(lamports: impl Into<f64>) -> f64 {
     lamports.into() / LAMPORTS_PER_SOL
+}
+
+/// Startup trading lines, including the wallet balance read that exists only to print.
+pub async fn ignr_trading_ready(
+    settings: &BotSettingsFromEnvironment,
+    wallet: &PublicKeyBytes,
+    lookup_table_count: usize,
+    rpc: &SolanaRpcClient,
+) {
+    trading_ready(settings, wallet, lookup_table_count);
+    if let Ok(lamports) = rpc.get_balance(wallet).await {
+        wallet_balance(lamports);
+    } else {
+        wallet_balance_unreadable();
+    }
 }
 
 pub fn trading_disabled(reason: &str) {

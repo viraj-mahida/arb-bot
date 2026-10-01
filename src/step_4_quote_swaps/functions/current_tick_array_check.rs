@@ -11,7 +11,7 @@ use crate::step_3_store_latest_pool_state::{
 
 pub fn is_tick_array_for_current_price_cached(
     pool: &ConcentratedLiquidityPoolState,
-    cached_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    cached_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
 ) -> bool {
     let ticks_covered_by_one_array = pool.dex.ticks_per_tick_array() * i32::from(pool.tick_spacing);
     if ticks_covered_by_one_array == 0 {

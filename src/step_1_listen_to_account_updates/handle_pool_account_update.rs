@@ -36,21 +36,19 @@ impl AccountUpdateListener<'_> {
         let previous_pool = self.cache.pool_state_by_address(&pool_state.pool_address);
         let tick_arrays_near_price = tick_array_pdas_near_current_price(&pool_state);
         self.cache.save_pool_state(pool_state.clone());
-        // Visitors and the LP whale follow the real price. The log line below
-        // uses the demo-shifted copy, matching the spread and the quote.
-        crate::dashboard_events::note_pool_change(previous_pool.as_ref(), &pool_state);
+        // ignr: visualizer visitors follow the real (unshifted) price.
+        crate::dashboard_events::ignr_note_pool_change(previous_pool.as_deref(), &pool_state);
         let newly_watched_tick_arrays = self
             .cache
             .start_watching_tick_arrays(&tick_arrays_near_price);
         let loaded_tick_array_count = self
             .cache
-            .tick_arrays_for_pool(&pool_state.pool_address)
-            .len();
+            .loaded_tick_array_count_for_pool(&pool_state.pool_address);
         let watched_tick_array_count = self
             .cache
             .watched_tick_array_count_for_pool(&pool_state.pool_address);
         print_logs::pool_account_updated(
-            &crate::dashboard_events::with_demo_price_shift(pool_state.clone()),
+            &pool_state,
             loaded_tick_array_count,
             watched_tick_array_count,
         );
@@ -86,12 +84,10 @@ impl AccountUpdateListener<'_> {
         }
 
         print_logs::pool_snapshot(self.cache, &pool_state.pool_address);
-        print_logs::print_arbitrage_quotes(&main_quote_round_trips_touching_pool(
-            self.cache,
-            &pool_state.pool_address,
-        ));
+        let quotes = main_quote_round_trips_touching_pool(self.cache, &pool_state.pool_address);
+        print_logs::print_arbitrage_quotes(&quotes);
         if let Some(trade_executor) = &self.trade_executor {
-            trade_executor.main_consider_trading(self.cache, &pool_state.pool_address);
+            trade_executor.main_consider_trading(self.cache, &quotes);
         }
     }
 }

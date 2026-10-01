@@ -6,8 +6,9 @@
 //! same lines are appended to `logs/dashboard-events.jsonl` for a replay.
 //!
 //! Nothing here runs unless `DASHBOARD=true`, except
-//! [`with_demo_price_shift`], which is a no-op unless `DEMO_PRICE_SHIFT_BPS`
-//! is set.
+//! [`ignr_with_demo_price_shift`], which is a no-op unless `DEMO_PRICE_SHIFT_BPS`
+//! is set. Bot steps call the `ignr_` functions and leave the rest of this
+//! module alone.
 
 mod server;
 
@@ -15,7 +16,7 @@ use std::collections::VecDeque;
 use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use orca_whirlpools_core::sqrt_price_to_tick_index;
@@ -101,7 +102,7 @@ pub fn demo_price_shift_bps() -> u64 {
 ///
 /// The square-root price and the tick index are moved together, using Orca's
 /// own tick conversion, so the quote libraries still accept the pool.
-pub fn with_demo_price_shift(
+pub fn ignr_with_demo_price_shift(
     mut pool: ConcentratedLiquidityPoolState,
 ) -> ConcentratedLiquidityPoolState {
     let basis_points = demo_price_shift_bps();
@@ -117,6 +118,16 @@ pub fn with_demo_price_shift(
     pool.sqrt_price_q64_64 = shifted;
     pool.current_tick_index = sqrt_price_to_tick_index(shifted);
     pool
+}
+
+/// Same shift as [`ignr_with_demo_price_shift`], sharing `pool` when no shift applies.
+pub fn ignr_share_or_shift_pool(
+    pool: Arc<ConcentratedLiquidityPoolState>,
+) -> Arc<ConcentratedLiquidityPoolState> {
+    if demo_price_shift_bps() == 0 || pool.dex != DexProgram::OrcaWhirlpool {
+        return pool;
+    }
+    Arc::new(ignr_with_demo_price_shift((*pool).clone()))
 }
 
 /// Open the broadcast channel, the JSONL file, and the WebSocket server.
@@ -218,7 +229,7 @@ pub fn geyser(slot: u64, dex: &str, kind: &str, line: &str) {
     }));
 }
 
-pub fn note_pool_change(
+pub fn ignr_note_pool_change(
     previous: Option<&ConcentratedLiquidityPoolState>,
     next: &ConcentratedLiquidityPoolState,
 ) {

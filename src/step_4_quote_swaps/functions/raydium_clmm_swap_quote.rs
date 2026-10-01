@@ -12,7 +12,7 @@ use crate::step_3_store_latest_pool_state::{
 
 pub(crate) fn quote_raydium_clmm_swap(
     pool: &ConcentratedLiquidityPoolState,
-    cached_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    cached_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
     input_amount: u64,
     direction: SwapDirection,
 ) -> Result<SwapQuoteForExactInput, WhySwapQuoteFailed> {

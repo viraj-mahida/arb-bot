@@ -34,4 +34,7 @@ mod solana_rpc_client;
 pub use geyser_grpc_client::*;
 pub use jito_block_engine_client::*;
 pub use recent_blockhash_cache::RecentBlockhashCache;
+// Test-only. The slot check lives in `recent_blockhash_cache`; tests call it from `src/tests`.
+#[cfg(test)]
+pub(crate) use recent_blockhash_cache::is_newer_slot;
 pub use solana_rpc_client::*;

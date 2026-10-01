@@ -1,12 +1,11 @@
 //! Result types of quoting: one swap, a two-pool round trip, and why a quote can fail.
 
-use crate::step_3_store_latest_pool_state::{
-    ConcentratedLiquidityPoolState, encode_public_key_as_base58,
-};
+use std::sync::Arc;
 
-/// Small trade size used in unit tests: 0.1 SOL in lamports.
-#[cfg(test)]
-pub const PROBE_TRADE_INPUT_AMOUNT: u64 = 100_000_000;
+use crate::step_3_store_latest_pool_state::{
+    ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks,
+    encode_public_key_as_base58,
+};
 
 /// Which way a swap goes through a pool.
 ///
@@ -75,6 +74,12 @@ pub struct TwoPoolArbitrageRoundTrip {
 pub struct DirectedRoundTripQuote {
     pub sell_pool_label: String,
     pub buy_pool_label: String,
+    /// Pools and tick arrays used to produce `result`. The trade decision reuses
+    /// them so the tick-book walk does not run a second time.
+    pub sell_pool: Arc<ConcentratedLiquidityPoolState>,
+    pub sell_pool_tick_arrays: Vec<Arc<TickArrayAccountWithInitializedTicks>>,
+    pub buy_pool: Arc<ConcentratedLiquidityPoolState>,
+    pub buy_pool_tick_arrays: Vec<Arc<TickArrayAccountWithInitializedTicks>>,
     pub result: Result<TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed>,
 }
 
@@ -103,7 +108,7 @@ impl TwoPoolArbitrageRoundTrip {
 }
 
 /// Why a quote could not be produced from the cached data.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum WhySwapQuoteFailed {
     /// We have not received any tick arrays for this pool yet.
     NoTickArraysCachedYet,

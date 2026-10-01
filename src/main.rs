@@ -65,9 +65,6 @@ use crate::solana_connections::{SolanaRpcClient, connect_to_geyser_grpc};
 use crate::step_1_listen_to_account_updates::main_process_account_updates_forever;
 use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, WatchedPools};
 use crate::step_6_build_and_send_transactions::ArbitrageTradeExecutor;
-use crate::step_6_build_and_send_transactions::decide_if_trade_is_worth_it::{
-    TradeDecisionRules, costs_of_primary_send_route,
-};
 
 pub(crate) mod bot_settings;
 pub(crate) mod dashboard_events;
@@ -92,9 +89,8 @@ async fn main() {
 
     // Load environment variables from a local `.env` file if present.
     dotenvy::dotenv().ok();
-    print_logs::start_copying_to_file();
-    // Before the banner, so startup lines are also recorded for the visualizer.
-    dashboard_events::install();
+    // ignr: log file + visualizer. Not part of the trading pipeline.
+    print_logs::ignr_start();
 
     if std::env::args().nth(1).as_deref() == Some("create-lookup-table") {
         let settings = BotSettingsFromEnvironment::from_env();
@@ -119,30 +115,10 @@ async fn main() {
     print_logs::rpc_client_ready();
 
     let mut settings = BotSettingsFromEnvironment::from_env();
-    let demo_bps = dashboard_events::demo_price_shift_bps();
-    if demo_bps > 0 {
-        // The shifted price exists only in the quoting copy. A transaction
-        // built from it must never be sent: the chain does not have that gap.
-        settings.send_real_transactions = false;
-        settings.simulate_on_rpc_before_sending = true;
-        print_logs::demo_scenario(demo_bps);
-    }
-    dashboard_events::status(
-        settings.send_real_transactions,
-        settings.simulate_on_rpc_before_sending,
-        funding_label(&settings),
-        None,
-        None,
-    );
-    let rules = TradeDecisionRules::from_settings(&settings);
-    let primary_route = costs_of_primary_send_route(&rules, 0);
-    dashboard_events::remember_primary_route_costs(
-        primary_route.network_signature_fee,
-        primary_route.priority_fee,
-        primary_route.jito_tip,
-        rules.flash_loan_fee_in_basis_points,
-        rules.min_profit_after_costs_lamports,
-    );
+    // ignr: demo price is not on-chain, so this turns sending off. Cache stays real.
+    print_logs::ignr_block_sends_during_demo_price_shift(&mut settings);
+    // ignr: visualizer fee line. The approve/skip check computes its own costs later.
+    print_logs::ignr_remember_dashboard_route_costs(&settings);
 
     let trade_executor = match ArbitrageTradeExecutor::prepare(settings, &rpc_client).await {
         Ok(Some(executor)) => Some(executor),
@@ -170,11 +146,4 @@ async fn main() {
         trade_executor,
     )
     .await;
-}
-
-fn funding_label(settings: &BotSettingsFromEnvironment) -> &'static str {
-    match settings.funding_mode {
-        crate::bot_settings::FundingMode::OwnWallet => "wallet",
-        crate::bot_settings::FundingMode::FlashLoan(_) => "flash_loan",
-    }
 }

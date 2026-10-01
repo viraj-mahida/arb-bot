@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Instant;
 
 use super::shared_pool_types::{
@@ -21,8 +21,10 @@ use super::solana_public_key_helpers::PublicKeyBytes;
 /// Lookup tables keyed by account address, plus "how fresh is the stream" clocks.
 #[derive(Debug, Default)]
 pub struct LatestPoolStateCache {
-    /// Newest decoded state of each watched pool.
-    pool_state_by_pool_address: RwLock<HashMap<PublicKeyBytes, ConcentratedLiquidityPoolState>>,
+    /// Newest decoded state of each watched pool. Shared with quotes so a read
+    /// clones the `Arc`, not the pool.
+    pool_state_by_pool_address:
+        RwLock<HashMap<PublicKeyBytes, Arc<ConcentratedLiquidityPoolState>>>,
     /// Pools grouped by `(token_a_mint, token_b_mint)`. Only pools in the same
     /// group can form a two-pool round trip; the DEX does not matter.
     ///
@@ -33,9 +35,11 @@ pub struct LatestPoolStateCache {
         RwLock<HashMap<(PublicKeyBytes, PublicKeyBytes), Vec<PublicKeyBytes>>>,
     /// Tick-array addresses we decided to watch, and what each one belongs to.
     /// Filled *before* their data arrives, so incoming bytes can be identified.
-    watched_tick_array_by_address: RwLock<HashMap<PublicKeyBytes, TickArrayPdaToWatch>>,
+    /// `addresses_by_pool` answers "how many are we watching for this pool?".
+    watched_tick_arrays: RwLock<WatchedTickArrays>,
     /// Newest decoded contents of each tick array we have received.
-    tick_array_by_address: RwLock<HashMap<PublicKeyBytes, TickArrayAccountWithInitializedTicks>>,
+    /// `addresses_by_pool` avoids scanning every tick array on each quote.
+    tick_arrays: RwLock<StoredTickArrays>,
     /// Raydium swap fee (millionths) keyed by `amm_config` address. Fee tiers
     /// practically never change, so each config is read once via RPC.
     raydium_fee_rate_by_fee_config_address: RwLock<HashMap<PublicKeyBytes, u16>>,
@@ -65,7 +69,7 @@ impl LatestPoolStateCache {
         }
         let mint_pair = (pool_state.token_a_mint, pool_state.token_b_mint);
         let pool_address = pool_state.pool_address;
-        let is_first_sighting = pools.insert(pool_address, pool_state).is_none();
+        let is_first_sighting = pools.insert(pool_address, Arc::new(pool_state)).is_none();
         drop(pools);
         if is_first_sighting {
             write_lock(&self.pool_addresses_by_mint_pair)
@@ -82,7 +86,7 @@ impl LatestPoolStateCache {
     pub fn other_pools_with_same_mint_pair(
         &self,
         pool_address: &PublicKeyBytes,
-    ) -> Vec<ConcentratedLiquidityPoolState> {
+    ) -> Vec<Arc<ConcentratedLiquidityPoolState>> {
         let pools = read_lock(&self.pool_state_by_pool_address);
         let Some(pool) = pools.get(pool_address) else {
             return Vec::new();
@@ -100,7 +104,7 @@ impl LatestPoolStateCache {
     pub fn pool_state_by_address(
         &self,
         pool_address: &PublicKeyBytes,
-    ) -> Option<ConcentratedLiquidityPoolState> {
+    ) -> Option<Arc<ConcentratedLiquidityPoolState>> {
         read_lock(&self.pool_state_by_pool_address)
             .get(pool_address)
             .cloned()
@@ -114,13 +118,19 @@ impl LatestPoolStateCache {
         &self,
         tick_arrays: &[TickArrayPdaToWatch],
     ) -> Vec<PublicKeyBytes> {
-        let mut watched = write_lock(&self.watched_tick_array_by_address);
+        let mut watched = write_lock(&self.watched_tick_arrays);
         let mut newly_watched_addresses = Vec::new();
         for &tick_array in tick_arrays {
             let was_already_watched = watched
+                .by_address
                 .insert(tick_array.tick_array_address, tick_array)
                 .is_some();
             if !was_already_watched {
+                watched
+                    .addresses_by_pool
+                    .entry(tick_array.pool_address)
+                    .or_default()
+                    .push(tick_array.tick_array_address);
                 newly_watched_addresses.push(tick_array.tick_array_address);
             }
         }
@@ -129,7 +139,8 @@ impl LatestPoolStateCache {
 
     /// If `address` is a tick array we watch, what it belongs to.
     pub fn watched_tick_array(&self, address: &PublicKeyBytes) -> Option<TickArrayPdaToWatch> {
-        read_lock(&self.watched_tick_array_by_address)
+        read_lock(&self.watched_tick_arrays)
+            .by_address
             .get(address)
             .copied()
     }
@@ -139,34 +150,59 @@ impl LatestPoolStateCache {
     /// Geyser messages can arrive out of order; comparing the write version
     /// keeps an old message from overwriting newer data.
     pub fn save_tick_array(&self, tick_array: TickArrayAccountWithInitializedTicks) {
-        let mut tick_arrays = write_lock(&self.tick_array_by_address);
-        if let Some(existing) = tick_arrays.get(&tick_array.tick_array_address)
+        let mut tick_arrays = write_lock(&self.tick_arrays);
+        let address = tick_array.tick_array_address;
+        if let Some(existing) = tick_arrays.by_address.get(&address)
             && existing.geyser_write_version_for_ordering
                 > tick_array.geyser_write_version_for_ordering
         {
             return;
         }
-        tick_arrays.insert(tick_array.tick_array_address, tick_array);
+        let pool_address = tick_array.pool_address;
+        let is_new = !tick_arrays.by_address.contains_key(&address);
+        tick_arrays.by_address.insert(address, Arc::new(tick_array));
+        if is_new {
+            tick_arrays
+                .addresses_by_pool
+                .entry(pool_address)
+                .or_default()
+                .push(address);
+        }
     }
 
     /// Every cached tick array that belongs to `pool_address`.
+    ///
+    /// Each entry is an `Arc` clone: the bytes stay in the cache, and the caller shares them.
     pub fn tick_arrays_for_pool(
         &self,
         pool_address: &PublicKeyBytes,
-    ) -> Vec<TickArrayAccountWithInitializedTicks> {
-        read_lock(&self.tick_array_by_address)
-            .values()
-            .filter(|tick_array| tick_array.pool_address == *pool_address)
-            .cloned()
+    ) -> Vec<Arc<TickArrayAccountWithInitializedTicks>> {
+        let tick_arrays = read_lock(&self.tick_arrays);
+        let Some(addresses) = tick_arrays.addresses_by_pool.get(pool_address) else {
+            return Vec::new();
+        };
+        addresses
+            .iter()
+            .filter_map(|address| tick_arrays.by_address.get(address).cloned())
             .collect()
+    }
+
+    /// How many tick arrays we have decoded for `pool_address`.
+    pub fn loaded_tick_array_count_for_pool(&self, pool_address: &PublicKeyBytes) -> usize {
+        read_lock(&self.tick_arrays)
+            .addresses_by_pool
+            .get(pool_address)
+            .map(Vec::len)
+            .unwrap_or(0)
     }
 
     /// How many tick arrays we are watching for `pool_address` (loaded or not yet).
     pub fn watched_tick_array_count_for_pool(&self, pool_address: &PublicKeyBytes) -> usize {
-        read_lock(&self.watched_tick_array_by_address)
-            .values()
-            .filter(|tick_array| tick_array.pool_address == *pool_address)
-            .count()
+        read_lock(&self.watched_tick_arrays)
+            .addresses_by_pool
+            .get(pool_address)
+            .map(Vec::len)
+            .unwrap_or(0)
     }
 
     pub fn raydium_fee_rate_for_fee_config(
@@ -215,4 +251,18 @@ fn read_lock<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
 fn write_lock<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
     lock.write()
         .expect("cache lock poisoned by a panic in another thread")
+}
+
+/// Watched tick-array addresses, plus an index from pool to those addresses.
+#[derive(Debug, Default)]
+struct WatchedTickArrays {
+    by_address: HashMap<PublicKeyBytes, TickArrayPdaToWatch>,
+    addresses_by_pool: HashMap<PublicKeyBytes, Vec<PublicKeyBytes>>,
+}
+
+/// Decoded tick arrays, plus an index from pool to those addresses.
+#[derive(Debug, Default)]
+struct StoredTickArrays {
+    by_address: HashMap<PublicKeyBytes, Arc<TickArrayAccountWithInitializedTicks>>,
+    addresses_by_pool: HashMap<PublicKeyBytes, Vec<PublicKeyBytes>>,
 }

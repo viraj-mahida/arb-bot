@@ -40,6 +40,7 @@ impl TradingWallet {
         Ok(Self { keypair })
     }
 
+    /// Test-only. The bot loads [`Self::load_from_keypair_file`].
     #[cfg(test)]
     pub fn from_keypair(keypair: Keypair) -> Self {
         Self { keypair }

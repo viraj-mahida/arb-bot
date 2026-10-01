@@ -83,19 +83,6 @@ impl RecentBlockhashCache {
     }
 }
 
-fn is_newer_slot(cached_slot: Option<u64>, incoming_slot: u64) -> bool {
+pub(crate) fn is_newer_slot(cached_slot: Option<u64>, incoming_slot: u64) -> bool {
     cached_slot.is_none_or(|slot| incoming_slot > slot)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_newer_slot;
-
-    #[test]
-    fn only_a_later_slot_replaces_the_cache() {
-        assert!(is_newer_slot(None, 1));
-        assert!(is_newer_slot(Some(10), 11));
-        assert!(!is_newer_slot(Some(10), 10));
-        assert!(!is_newer_slot(Some(10), 9));
-    }
 }

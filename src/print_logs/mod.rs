@@ -29,7 +29,6 @@ mod trade_execution_logs;
 
 pub use account_update_logs::*;
 pub use arbitrage_quote_logs::*;
-pub use output::start_copying_to_file;
 pub use pool_snapshot_logs::*;
 pub use startup_banner::*;
 pub use trade_execution_logs::*;

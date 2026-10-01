@@ -26,7 +26,8 @@ use super::assemble_arbitrage_transaction::{
     decode_address_lookup_table, main_arbitrage_instructions,
 };
 use super::decide_if_trade_is_worth_it::{
-    ApprovedArbitrageTrade, CacheFreshness, TradeDecisionRules, main_decide_if_trade_is_worth_it,
+    ApprovedArbitrageTrade, CacheFreshness, TradeDecisionRules, WhyTradeWasSkipped,
+    check_cache_is_fresh, main_decide_from_quoted_round_trip,
 };
 use super::flash_loan_instructions::{
     FlashLoanProvider, JupiterFlashLoanAccounts, KaminoFlashLoanAccounts,
@@ -39,8 +40,10 @@ use super::trading_wallet::TradingWallet;
 use crate::bot_settings::{BotSettingsFromEnvironment, FlashLoanLender, FundingMode};
 use crate::print_logs;
 use crate::solana_connections::{JitoBlockEngineClient, RecentBlockhashCache, SolanaRpcClient};
-use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, PublicKeyBytes};
-use crate::step_4_quote_swaps::{CachedPoolWithTickArrays, pool_label};
+use crate::step_3_store_latest_pool_state::{
+    LatestPoolStateCache, PublicKeyBytes, TickArrayAccountWithInitializedTicks,
+};
+use crate::step_5_find_best_arbitrage_size::RoundTripQuotesTouchingPool;
 
 pub struct ArbitrageTradeExecutor {
     settings: BotSettingsFromEnvironment,
@@ -137,12 +140,14 @@ impl ArbitrageTradeExecutor {
         .unwrap_or_else(default_jito_tip_accounts);
 
         let blockhash_cache = RecentBlockhashCache::new();
-        print_logs::trading_ready(&settings, &wallet.address(), address_lookup_tables.len());
-        if let Ok(lamports) = rpc.get_balance(&wallet.address()).await {
-            print_logs::wallet_balance(lamports);
-        } else {
-            print_logs::wallet_balance_unreadable();
-        }
+        // ignr: startup trading lines, including the balance read used only for the log.
+        print_logs::ignr_trading_ready(
+            &settings,
+            &wallet.address(),
+            address_lookup_tables.len(),
+            rpc,
+        )
+        .await;
         Ok(Some(Arc::new(Self {
             rules: TradeDecisionRules::from_settings(&settings),
             settings,
@@ -167,48 +172,53 @@ impl ArbitrageTradeExecutor {
         &self.blockhash_cache
     }
 
-    /// Called after every pool update: check both directions against every
-    /// pool sharing the updated pool's mint pair, and start the most profitable
-    /// approved trade in the background if no trade is running.
+    /// Called after every pool update with the round trips already quoted for
+    /// the log. Starts the most profitable approved trade in the background if
+    /// no trade is running.
     pub fn main_consider_trading(
         self: &Arc<Self>,
         cache: &LatestPoolStateCache,
-        updated_pool_address: &PublicKeyBytes,
+        quotes: &RoundTripQuotesTouchingPool,
     ) {
-        let Some(updated_pool) = cache.pool_state_by_address(updated_pool_address) else {
-            return;
-        };
-        let updated_pool = CachedPoolWithTickArrays::from_cache(cache, updated_pool);
         let freshness = CacheFreshness {
             newest_slot_seen_from_stream: cache.newest_slot_seen_from_stream(),
             milliseconds_since_last_stream_update: cache.milliseconds_since_last_stream_update(),
         };
 
         let mut best_trade: Option<ApprovedArbitrageTrade> = None;
-        for other_pool in cache.other_pools_with_same_mint_pair(updated_pool_address) {
-            let other_pool = CachedPoolWithTickArrays::from_cache(cache, other_pool);
-            for (sell, buy) in [(&updated_pool, &other_pool), (&other_pool, &updated_pool)] {
-                let direction_label =
-                    format!("{}→{}", pool_label(&sell.pool), pool_label(&buy.pool));
-                match main_decide_if_trade_is_worth_it(
-                    &sell.pool,
-                    &sell.tick_arrays,
-                    &buy.pool,
-                    &buy.tick_arrays,
+        for quote in &quotes.best_size_round_trips {
+            let sell_tick_arrays = tick_array_refs(&quote.sell_pool_tick_arrays);
+            let buy_tick_arrays = tick_array_refs(&quote.buy_pool_tick_arrays);
+            let decision = match quote.result {
+                Ok(round_trip) => main_decide_from_quoted_round_trip(
+                    &quote.sell_pool,
+                    &sell_tick_arrays,
+                    &quote.buy_pool,
+                    &buy_tick_arrays,
+                    round_trip,
+                    freshness,
+                    &self.rules,
+                ),
+                Err(reason) => match check_cache_is_fresh(
+                    &[quote.sell_pool.as_ref(), quote.buy_pool.as_ref()],
                     freshness,
                     &self.rules,
                 ) {
-                    Ok(trade) => {
-                        print_logs::trade_approved(&trade);
-                        let beats_best = best_trade.as_ref().is_none_or(|best| {
-                            trade.expected_profit_after_costs > best.expected_profit_after_costs
-                        });
-                        if beats_best {
-                            best_trade = Some(trade);
-                        }
+                    Err(stale) => Err(stale),
+                    Ok(()) => Err(WhyTradeWasSkipped::QuoteFailed(reason)),
+                },
+            };
+            match decision {
+                Ok(trade) => {
+                    print_logs::trade_approved(&trade);
+                    let beats_best = best_trade.as_ref().is_none_or(|best| {
+                        trade.expected_profit_after_costs > best.expected_profit_after_costs
+                    });
+                    if beats_best {
+                        best_trade = Some(trade);
                     }
-                    Err(reason) => print_logs::trade_skipped(&direction_label, &reason),
                 }
+                Err(reason) => print_logs::trade_skipped(&quote.direction_label(), &reason),
             }
         }
         if let Some(trade) = best_trade {
@@ -340,6 +350,12 @@ impl ArbitrageTradeExecutor {
         )
         .await
     }
+}
+
+fn tick_array_refs(
+    tick_arrays: &[Arc<TickArrayAccountWithInitializedTicks>],
+) -> Vec<&TickArrayAccountWithInitializedTicks> {
+    tick_arrays.iter().map(Arc::as_ref).collect()
 }
 
 async fn fetch_one_account(

@@ -11,7 +11,7 @@ pub fn pool_snapshot(cache: &LatestPoolStateCache, updated_pool_address: &Public
     };
     // Demo mode shifts Orca on the copy used for the spread line and the
     // dashboard boards. The cache itself is unchanged.
-    let updated_pool = crate::dashboard_events::with_demo_price_shift(updated_pool);
+    let updated_pool = crate::dashboard_events::ignr_share_or_shift_pool(updated_pool);
     let other_pools = cache.other_pools_with_same_mint_pair(updated_pool_address);
     if other_pools.is_empty() {
         log_line!(
@@ -21,7 +21,7 @@ pub fn pool_snapshot(cache: &LatestPoolStateCache, updated_pool_address: &Public
         return;
     }
     for other_pool in other_pools {
-        let other_pool = crate::dashboard_events::with_demo_price_shift(other_pool);
+        let other_pool = crate::dashboard_events::ignr_share_or_shift_pool(other_pool);
         print_spread(&updated_pool, &other_pool);
     }
 }

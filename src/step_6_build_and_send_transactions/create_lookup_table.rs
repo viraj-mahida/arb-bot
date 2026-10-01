@@ -317,7 +317,7 @@ async fn send_and_wait(
             }
         }
     }
-    
+
     Err(format!(
         "lookup-table transaction {signature} was not confirmed in 60 s; re-run"
     ))

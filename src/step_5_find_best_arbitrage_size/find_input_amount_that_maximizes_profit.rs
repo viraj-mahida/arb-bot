@@ -40,9 +40,9 @@ struct WhatStopsThisWalkStep {
 /// size with Step 4.
 pub fn main_find_input_amount_that_maximizes_profit(
     sell_pool: &ConcentratedLiquidityPoolState,
-    sell_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    sell_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
     buy_pool: &ConcentratedLiquidityPoolState,
-    buy_pool_tick_arrays: &[TickArrayAccountWithInitializedTicks],
+    buy_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
 ) -> Result<u64, WhySwapQuoteFailed> {
     let mut sell_pool = PoolPriceWalkerAlongTicks::new(sell_pool, sell_pool_tick_arrays)?;
     let mut buy_pool = PoolPriceWalkerAlongTicks::new(buy_pool, buy_pool_tick_arrays)?;
