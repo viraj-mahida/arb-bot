@@ -30,6 +30,13 @@ Notes from the landing and send-path discussion. What is already in the bot, wha
 - The auction ranks tip against compute units. A smaller transaction with the same tip beats a heavier one.
 - Keep `RPC_SIMULATION` false. A simulate-before-send is another round trip. The on-chain minimum output already reverts a stale trade.
 
+## Later, on the hot path
+
+The tick walk and the quotes are microseconds. These two sit between a pool update and the trade decision, and both wait on something slower than the math.
+
+- **The tick-array load blocks the stream.** When the price moves into tick arrays the bot is not watching yet, `main_handle_pool_account_update` waits on the Geyser resubscribe and the RPC `getMultipleAccounts` before it quotes. Nothing else from the stream is processed until both finish, and that is when the price is moving. Quote and decide first from the tick arrays already in the cache. A quote that needs a missing array already fails with `TickArrayForCurrentPriceNotCachedYet`. Then `tokio::spawn` the subscribe and the RPC load. The cache is already `Arc` plus locks, so the background task can write into it.
+- **Logs run before the decision, and each line waits on disk.** `pool_snapshot` and `print_arbitrage_quotes` run before `main_consider_trading`. Every line is a `println!` plus a write and `flush()` in `append_to_file`. Call `main_consider_trading` first. Wrap the log file in a `BufWriter`, or send lines to a background thread through a channel, so a flush is not on the trading path.
+
 ## When the machine can move
 
 Sending only to Singapore does not wait for a validator in Singapore, and it does not only run when that city produces the block. Each Jito leader is tied to the regional engine its relayer uses. The Singapore engine auctions immediately for leaders connected there. For a leader connected to New York, it must forward the bundle, and that forward is usually too slow. The current slot's auction is already closed by the time the bundle arrives. The bundle is for the next leader. If it misses that leader too, it can still be tried on the one after, until it expires. It is not held for a later Singapore leader.

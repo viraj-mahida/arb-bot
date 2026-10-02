@@ -64,4 +64,4 @@ pub use functions::is_tick_array_for_current_price_cached;
 pub use quote_swap_exact_input::main_quote_swap_exact_input;
 pub use swap_quote_types::*;
 pub use two_pool_arbitrage_round_trip::main_quote_two_pool_round_trip;
-pub(crate) use two_pool_arbitrage_round_trip::{CachedPoolWithTickArrays, quote_both_directions};
+pub(crate) use two_pool_arbitrage_round_trip::{CachedPoolWithTickArrays, quote_sell_high_buy_low};

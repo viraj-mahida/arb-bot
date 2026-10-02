@@ -77,9 +77,14 @@ fn tick_array_refs(
     tick_arrays.iter().map(Arc::as_ref).collect()
 }
 
-/// Quote `updated_pool` against `other_pool` in both sell→buy directions.
-/// At most one direction can be profitable.
-pub(crate) fn quote_both_directions(
+/// Quote selling token A on the more expensive pool and buying it back on the cheaper one.
+///
+/// Price is `sqrt_price` (token B per token A). Selling where that is higher and
+/// buying where it is lower is the only direction that can profit. Fees can
+/// close a small gap, but they cannot make the cheaper pool the right place to
+/// sell, so the other direction is not quoted. Equal prices cannot profit
+/// either way.
+pub(crate) fn quote_sell_high_buy_low(
     updated_pool: &CachedPoolWithTickArrays,
     other_pool: &CachedPoolWithTickArrays,
     mut quote: impl FnMut(
@@ -88,18 +93,23 @@ pub(crate) fn quote_both_directions(
         &ConcentratedLiquidityPoolState,
         &[&TickArrayAccountWithInitializedTicks],
     ) -> Result<TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed>,
-) -> [DirectedRoundTripQuote; 2] {
-    [(updated_pool, other_pool), (other_pool, updated_pool)].map(|(sell, buy)| {
-        let sell_tick_arrays = tick_array_refs(&sell.tick_arrays);
-        let buy_tick_arrays = tick_array_refs(&buy.tick_arrays);
-        DirectedRoundTripQuote {
-            sell_pool_label: pool_label(&sell.pool),
-            buy_pool_label: pool_label(&buy.pool),
-            result: quote(&sell.pool, &sell_tick_arrays, &buy.pool, &buy_tick_arrays),
-            sell_pool: Arc::clone(&sell.pool),
-            sell_pool_tick_arrays: sell.tick_arrays.clone(),
-            buy_pool: Arc::clone(&buy.pool),
-            buy_pool_tick_arrays: buy.tick_arrays.clone(),
-        }
+) -> Option<DirectedRoundTripQuote> {
+    let (sell, buy) = if updated_pool.pool.sqrt_price_q64_64 > other_pool.pool.sqrt_price_q64_64 {
+        (updated_pool, other_pool)
+    } else if other_pool.pool.sqrt_price_q64_64 > updated_pool.pool.sqrt_price_q64_64 {
+        (other_pool, updated_pool)
+    } else {
+        return None;
+    };
+    let sell_tick_arrays = tick_array_refs(&sell.tick_arrays);
+    let buy_tick_arrays = tick_array_refs(&buy.tick_arrays);
+    Some(DirectedRoundTripQuote {
+        sell_pool_label: pool_label(&sell.pool),
+        buy_pool_label: pool_label(&buy.pool),
+        result: quote(&sell.pool, &sell_tick_arrays, &buy.pool, &buy_tick_arrays),
+        sell_pool: Arc::clone(&sell.pool),
+        sell_pool_tick_arrays: sell.tick_arrays.clone(),
+        buy_pool: Arc::clone(&buy.pool),
+        buy_pool_tick_arrays: buy.tick_arrays.clone(),
     })
 }

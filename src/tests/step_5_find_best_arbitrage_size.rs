@@ -141,24 +141,38 @@ fn no_round_trips_until_a_second_pool_with_the_same_mints_arrives() {
     );
 }
 
-/// An update re-quotes the updated pool against every same-mint pool (two
-/// directions each), skips pairs it is not part of, and ignores other mints.
+/// An update re-quotes the updated pool against every same-mint pool in the one
+/// direction that can profit (sell the higher price), skips an equal price, and
+/// ignores other mints.
 #[test]
-fn update_quotes_only_pairs_that_include_the_updated_pool() {
+fn update_quotes_only_the_higher_price_sell_for_pairs_that_include_the_updated_pool() {
     let cache = LatestPoolStateCache::new();
-    let pool_on_dex = |dex, address_byte: u8| {
-        let (mut pool, _) = test_pool_with_one_empty_tick_array(dex, DEEP_LIQUIDITY);
+    let pool_on_dex = |dex, address_byte: u8, tick: i32| {
+        let (mut pool, _) = test_pool_at_tick_with_one_empty_tick_array(dex, DEEP_LIQUIDITY, tick);
         pool.pool_address = [address_byte; 32];
         pool
     };
-    let updated = pool_on_dex(DexProgram::RaydiumClmm, 1);
+    let updated = pool_on_dex(DexProgram::RaydiumClmm, 1, 100);
     cache.save_pool_state(updated.clone());
-    cache.save_pool_state(pool_on_dex(DexProgram::RaydiumClmm, 2));
-    cache.save_pool_state(pool_on_dex(DexProgram::OrcaWhirlpool, 3));
-    let mut other_mints = pool_on_dex(DexProgram::OrcaWhirlpool, 4);
+    cache.save_pool_state(pool_on_dex(DexProgram::RaydiumClmm, 2, 200));
+    cache.save_pool_state(pool_on_dex(DexProgram::OrcaWhirlpool, 3, 50));
+    cache.save_pool_state(pool_on_dex(DexProgram::OrcaWhirlpool, 5, 100));
+    let mut other_mints = pool_on_dex(DexProgram::OrcaWhirlpool, 4, 300);
     other_mints.token_b_mint = [9; 32];
     cache.save_pool_state(other_mints);
 
     let quotes = main_quote_round_trips_touching_pool(&cache, &updated.pool_address);
-    assert_eq!(quotes.best_size_round_trips.len(), 4);
+    let directions: Vec<_> = quotes
+        .best_size_round_trips
+        .iter()
+        .map(|quote| {
+            (
+                quote.sell_pool.pool_address[0],
+                quote.buy_pool.pool_address[0],
+            )
+        })
+        .collect();
+    // Tick 200 is dearer than the update, so sell there. Tick 50 is cheaper, so
+    // sell the update. Tick 100 matches, so that pair is skipped.
+    assert_eq!(directions, vec![(2, 1), (1, 3)]);
 }

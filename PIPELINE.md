@@ -27,7 +27,7 @@ flowchart TD
   p13 --> loop
   s3 -->|tick array only| loop
 
-  s3 -->|pool update| pair["5.2 Quote both directions<br/>Orca→Raydium and Raydium→Orca"]
+  s3 -->|pool update| pair["5.2 Quote sell-high buy-low<br/>one direction per pair"]
   pair --> size["5.1 Walk both tick books → best size N"]
   size --> q1["4.1 Quote one swap of N"]
   q1 --> q2["4.2 Chain two quotes = round trip"]
@@ -66,5 +66,5 @@ flowchart TD
 | 2 | `src/step_2_decode_account_bytes` | 2.1 pick Orca or Raydium decoder |
 | 3 | `src/step_3_store_latest_pool_state` | 3.1 in-memory cache |
 | 4 | `src/step_4_quote_swaps` | 4.1 one swap, 4.2 round trip |
-| 5 | `src/step_5_find_best_arbitrage_size` | 5.1 best size, 5.2 both directions |
+| 5 | `src/step_5_find_best_arbitrage_size` | 5.1 best size, 5.2 sell high, buy low |
 | 6 | `src/step_6_build_and_send_transactions` | 6.1 decide, 6.2 assemble, 6.3 simulate/send, 6.4 executor |

@@ -99,7 +99,7 @@ sequenceDiagram
         L->>G: re-subscribe if new tick arrays are near the price
         L->>E: main_consider_trading
         E->>C: other pools with the same mint pair
-        loop each pair, both directions
+        loop each pair, sell high buy low
             E->>Q: main_decide_if_trade_is_worth_it
             Q-->>E: approved trade or reason skipped
         end

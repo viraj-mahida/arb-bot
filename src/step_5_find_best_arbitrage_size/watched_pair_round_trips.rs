@@ -6,16 +6,18 @@
 //! pool P updates only the pairs that include P have new prices. So with `n`
 //! pools in P's mint-pair group we quote `n - 1` pairs, not every pair.
 //!
-//! We do not know in advance which pool is more expensive, so both sell→buy
-//! directions are quoted. At most one of them can be profitable at a time.
+//! Each pair is quoted in one direction: sell token A where its price is
+//! higher, buy it back where the price is lower. The reverse loses money.
+//! Equal prices are skipped.
 
 use super::main_quote_most_profitable_two_pool_round_trip;
 use crate::step_3_store_latest_pool_state::{LatestPoolStateCache, PublicKeyBytes};
 use crate::step_4_quote_swaps::{
-    CachedPoolWithTickArrays, DirectedRoundTripQuote, quote_both_directions,
+    CachedPoolWithTickArrays, DirectedRoundTripQuote, quote_sell_high_buy_low,
 };
 
-/// Best-size round trips for every pair that includes the updated pool, both directions.
+/// Best-size round trip for every pair that includes the updated pool.
+/// Sell the higher-priced pool, buy the lower-priced one.
 pub struct RoundTripQuotesTouchingPool {
     pub best_size_round_trips: Vec<DirectedRoundTripQuote>,
 }
@@ -36,7 +38,7 @@ pub fn main_quote_round_trips_touching_pool(
         .into_iter()
         .flat_map(|other_pool| {
             let other_pool = CachedPoolWithTickArrays::from_cache(cache, other_pool);
-            quote_both_directions(
+            quote_sell_high_buy_low(
                 &updated_pool,
                 &other_pool,
                 main_quote_most_profitable_two_pool_round_trip,
