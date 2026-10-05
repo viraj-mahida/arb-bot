@@ -182,9 +182,8 @@ pub fn compile_and_sign_v0_transaction(
     let message_bytes = VersionedMessage::V0(message).serialize();
     let signature = wallet.sign_message_bytes(&message_bytes);
 
-    // One signature → the "compact-u16" count is the single byte 1.
     let mut wire_bytes = Vec::with_capacity(1 + signature.len() + message_bytes.len());
-    wire_bytes.push(1);
+    wire_bytes.push(1); // One signature → the "compact-u16" count is the single byte 1.
     wire_bytes.extend_from_slice(&signature);
     wire_bytes.extend_from_slice(&message_bytes);
     if wire_bytes.len() > MAX_TRANSACTION_SIZE_IN_BYTES {

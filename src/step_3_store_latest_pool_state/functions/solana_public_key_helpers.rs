@@ -32,15 +32,6 @@ pub fn encode_public_key_as_base58(public_key: &PublicKeyBytes) -> String {
     bs58::encode(public_key).into_string()
 }
 
-/// First and last 4 base58 characters, e.g. `Czfq..44zE`, so log lines stay short.
-pub fn shorten_public_key_for_logs(public_key: &PublicKeyBytes) -> String {
-    let full = encode_public_key_as_base58(public_key);
-    if full.len() <= 10 {
-        return full;
-    }
-    format!("{}..{}", &full[..4], &full[full.len() - 4..])
-}
-
 /// Convert a byte slice from a network message into a public key, if it is exactly 32 bytes.
 pub fn public_key_from_byte_slice(bytes: &[u8]) -> Option<PublicKeyBytes> {
     <PublicKeyBytes>::try_from(bytes).ok()

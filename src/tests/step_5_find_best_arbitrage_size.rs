@@ -52,6 +52,34 @@ fn no_arbitrage_when_fees_are_bigger_than_the_price_gap() {
     ));
 }
 
+/// A fee-adjusted gap smaller than 1 USDC must not be walked onward to the next tick.
+///
+/// The closed-form size truncates that gap to 0. The next cached tick is still
+/// hundreds of USDC away, so treating 0 as "skip this event" would size a trade
+/// that is already past the profitable point.
+#[test]
+fn sub_unit_price_gap_stops_the_walk_instead_of_continuing_to_the_next_tick() {
+    let liquidity = 1_000_000;
+    let (mut sell_pool, sell_tick_array) =
+        test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, liquidity, 0);
+    let (buy_pool, buy_tick_array) =
+        test_pool_at_tick_with_one_empty_tick_array(DexProgram::OrcaWhirlpool, liquidity, 0);
+    // Both fees are 0.04%, so sqrt(k_sell * k_buy) = 0.9996. Sit just past that
+    // breakeven: the float gap is still open, but it is under 1 USDC.
+    let fee_kept = 0.9996_f64;
+    let breakeven_sqrt_price = (buy_pool.sqrt_price_q64_64 as f64) / fee_kept;
+    sell_pool.sqrt_price_q64_64 = (breakeven_sqrt_price * (1.0 + 1e-7)) as u128;
+
+    let size = main_find_input_amount_that_maximizes_profit(
+        &sell_pool,
+        &[&sell_tick_array],
+        &buy_pool,
+        &[&buy_tick_array],
+    )
+    .unwrap();
+    assert_eq!(size, 0);
+}
+
 /// A wide gap in deep pools is profitable, and the best size is far bigger than the 0.1 SOL probe.
 #[test]
 fn wide_price_gap_gives_profitable_size_larger_than_probe() {

@@ -100,7 +100,7 @@ sequenceDiagram
         L->>E: main_consider_trading
         E->>C: other pools with the same mint pair
         loop each pair, sell high buy low
-            E->>Q: main_decide_if_trade_is_worth_it
+            E->>Q: main_decide_from_quoted_round_trip
             Q-->>E: approved trade or reason skipped
         end
         E->>T: spawn best trade (one at a time, with cooldown)

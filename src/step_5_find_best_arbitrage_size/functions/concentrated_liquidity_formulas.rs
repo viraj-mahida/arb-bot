@@ -123,10 +123,9 @@ pub(crate) fn bridge_amount_until_price_gap_closes(
     if sell_pool.active_liquidity == 0 || buy_pool.active_liquidity == 0 {
         return 0;
     }
+    let sell_pool_fee_kept = fraction_of_input_left_after_fee(sell_pool.fee_rate_in_millionths);
     let buy_pool_fee_kept = fraction_of_input_left_after_fee(buy_pool.fee_rate_in_millionths);
-    let square_root_of_both_fees_kept =
-        (fraction_of_input_left_after_fee(sell_pool.fee_rate_in_millionths) * buy_pool_fee_kept)
-            .sqrt();
+    let square_root_of_both_fees_kept = (sell_pool_fee_kept * buy_pool_fee_kept).sqrt();
 
     let price_gap_after_fees = square_root_of_both_fees_kept * sell_pool.sqrt_price_q64_64 as f64
         - buy_pool.sqrt_price_q64_64 as f64;

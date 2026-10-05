@@ -8,7 +8,10 @@ use crate::step_2_decode_account_bytes::raydium_clmm_account_decoder::decode_ray
 use crate::step_3_store_latest_pool_state::known_program_and_pool_addresses::{
     ORCA_WHIRLPOOL_PROGRAM_ADDRESS, RAYDIUM_CLMM_PROGRAM_ADDRESS,
 };
-use crate::step_3_store_latest_pool_state::{DexProgram, parse_base58_public_key};
+use crate::step_3_store_latest_pool_state::{
+    ConcentratedLiquidityPoolState, DexProgram, TickArrayAccountWithInitializedTicks,
+    parse_base58_public_key,
+};
 use crate::step_4_quote_swaps::SwapDirection;
 use crate::step_5_find_best_arbitrage_size::main_quote_most_profitable_two_pool_round_trip;
 use crate::step_6_build_and_send_transactions::assemble_arbitrage_transaction::{
@@ -18,7 +21,7 @@ use crate::step_6_build_and_send_transactions::assemble_arbitrage_transaction::{
 use crate::step_6_build_and_send_transactions::decide_if_trade_is_worth_it::{
     ApprovedArbitrageTrade, CacheFreshness, TradeDecisionRules, WhyTradeWasSkipped,
     check_cache_is_fresh, costs_of_primary_send_route, estimate_transaction_costs,
-    main_decide_from_quoted_round_trip, main_decide_if_trade_is_worth_it,
+    main_decide_from_quoted_round_trip,
 };
 use crate::step_6_build_and_send_transactions::flash_loan_instructions::{
     FlashLoanProvider, JUPITER_BORROW_DISCRIMINATOR, JUPITER_PAYBACK_DISCRIMINATOR,
@@ -54,6 +57,33 @@ fn fresh_cache() -> CacheFreshness {
         newest_slot_seen_from_stream: 1,
         milliseconds_since_last_stream_update: Some(10),
     }
+}
+
+/// Quote with Step 5, then run the same decision the live loop runs on that quote.
+fn main_decide_if_trade_is_worth_it(
+    sell_pool: &ConcentratedLiquidityPoolState,
+    sell_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
+    buy_pool: &ConcentratedLiquidityPoolState,
+    buy_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
+    freshness: CacheFreshness,
+    rules: &TradeDecisionRules,
+) -> Result<ApprovedArbitrageTrade, WhyTradeWasSkipped> {
+    check_cache_is_fresh(&[sell_pool, buy_pool], freshness, rules)?;
+    let round_trip = main_quote_most_profitable_two_pool_round_trip(
+        sell_pool,
+        sell_pool_tick_arrays,
+        buy_pool,
+        buy_pool_tick_arrays,
+    )?;
+    main_decide_from_quoted_round_trip(
+        sell_pool,
+        sell_pool_tick_arrays,
+        buy_pool,
+        buy_pool_tick_arrays,
+        round_trip,
+        freshness,
+        rules,
+    )
 }
 
 /// Orca priced ~1% above Raydium: selling SOL on Orca and buying it back on Raydium pays.

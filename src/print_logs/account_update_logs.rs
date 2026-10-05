@@ -2,15 +2,18 @@
 
 use crate::step_3_store_latest_pool_state::{
     ConcentratedLiquidityPoolState, DexProgram, PublicKeyBytes,
-    TickArrayAccountWithInitializedTicks, encode_public_key_as_base58, shorten_public_key_for_logs,
+    TickArrayAccountWithInitializedTicks, encode_public_key_as_base58,
 };
 use crate::step_4_quote_swaps::pool_label;
 
 pub fn pool_account_updated(
+    previous: Option<&ConcentratedLiquidityPoolState>,
     pool: &ConcentratedLiquidityPoolState,
     loaded_tick_array_count: usize,
     watched_tick_array_count: usize,
 ) {
+    // Visitors follow the real price. The demo shift below is only for this log line.
+    crate::dashboard_events::ignr_note_pool_change(previous, pool);
     // Demo shift matches the spread line and the quote. The caller's pool is unchanged.
     let pool = crate::dashboard_events::ignr_with_demo_price_shift(pool.clone());
     log_line!(
@@ -78,7 +81,7 @@ pub fn tick_array_account_updated(tick_array: &TickArrayAccountWithInitializedTi
     log_line!(
         "[geyser/tick-array] {:<14}  pool={}  start_tick={:<8} slot={:<10} initialized_ticks={}",
         tick_array.dex.name(),
-        shorten_public_key_for_logs(&tick_array.pool_address),
+        &shorten_public_key(&tick_array.pool_address),
         tick_array.start_tick_index,
         tick_array.slot,
         tick_array.initialized_ticks.len(),
@@ -143,4 +146,13 @@ pub fn raydium_fee_config_load_failed() {
 
 pub fn geyser_stream_error(error: impl std::fmt::Display) {
     log_error!("[error] Geyser stream: {error}");
+}
+
+/// First and last 4 base58 characters, e.g. `Czfq..44zE`, so log lines stay short.
+fn shorten_public_key(public_key: &PublicKeyBytes) -> String {
+    let full = encode_public_key_as_base58(public_key);
+    if full.len() <= 10 {
+        return full;
+    }
+    format!("{}..{}", &full[..4], &full[full.len() - 4..])
 }

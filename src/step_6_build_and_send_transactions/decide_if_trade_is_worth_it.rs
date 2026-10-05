@@ -11,7 +11,7 @@
 //! - **Flash-loan fee:** a small percentage of the borrowed amount (flash mode only).
 //!
 //! A trade is approved only if, after all of that, at least
-//! `MIN_PROFIT_LAMPORTS` is left. Before even quoting, we refuse to trade on
+//! `MIN_PROFIT_LAMPORTS` is left. Before looking at the quote, we refuse to trade on
 //! **stale** data: if the Geyser stream went quiet or a pool's state is many
 //! slots behind the newest slot we have seen, the prices in memory may no
 //! longer be real.
@@ -20,7 +20,7 @@
 //! in the DEX programs). They turn "we hope it is profitable" into "the chain
 //! guarantees it is, or the whole transaction reverts".
 //!
-//! **Start here:** [`main_decide_if_trade_is_worth_it`]. Helpers and types are below.
+//! **Start here:** [`main_decide_from_quoted_round_trip`]. Helpers and types are below.
 
 use crate::bot_settings::BotSettingsFromEnvironment;
 use crate::step_3_store_latest_pool_state::{
@@ -30,43 +30,10 @@ use crate::step_4_quote_swaps::{
     SwapDirection, TwoPoolArbitrageRoundTrip, WhySwapQuoteFailed, main_quote_swap_exact_input,
     main_quote_two_pool_round_trip,
 };
-use crate::step_5_find_best_arbitrage_size::main_quote_most_profitable_two_pool_round_trip;
 
-/// Run every check and, if they all pass, return the exact trade to build.
+/// Cost, cap, and slippage checks for a round trip already quoted for this pool update.
 ///
 /// Leg 1 sells SOL on `sell_pool`; leg 2 buys SOL back on `buy_pool`.
-///
-/// The live loop does not call this. It quotes once for the log, then calls
-/// [`main_decide_from_quoted_round_trip`]. Tests call this to quote and decide together.
-#[cfg_attr(not(test), allow(dead_code))]
-pub fn main_decide_if_trade_is_worth_it(
-    sell_pool: &ConcentratedLiquidityPoolState,
-    sell_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
-    buy_pool: &ConcentratedLiquidityPoolState,
-    buy_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
-    freshness: CacheFreshness,
-    rules: &TradeDecisionRules,
-) -> Result<ApprovedArbitrageTrade, WhyTradeWasSkipped> {
-    check_cache_is_fresh(&[sell_pool, buy_pool], freshness, rules)?;
-    let round_trip = main_quote_most_profitable_two_pool_round_trip(
-        sell_pool,
-        sell_pool_tick_arrays,
-        buy_pool,
-        buy_pool_tick_arrays,
-    )?;
-    approve_quoted_round_trip(
-        sell_pool,
-        sell_pool_tick_arrays,
-        buy_pool,
-        buy_pool_tick_arrays,
-        round_trip,
-        rules,
-    )
-}
-
-/// Same cost, cap, and slippage checks as [`main_decide_if_trade_is_worth_it`],
-/// using a round trip already quoted for this pool update.
-///
 /// Skips the tick-book walk. Still refuses a stale cache before looking at the quote.
 pub fn main_decide_from_quoted_round_trip(
     sell_pool: &ConcentratedLiquidityPoolState,

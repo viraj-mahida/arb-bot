@@ -30,14 +30,6 @@ pub fn main_quote_most_profitable_two_pool_round_trip(
     if best_input_amount == 0 {
         return Err(WhySwapQuoteFailed::NoProfitablePriceGapAfterFees);
     }
-    // ignr: visualizer profit curve. No-op unless DASHBOARD=true.
-    crate::print_logs::ignr_sample_profit_curve(
-        sell_pool,
-        sell_pool_tick_arrays,
-        buy_pool,
-        buy_pool_tick_arrays,
-        best_input_amount,
-    );
     main_quote_two_pool_round_trip(
         sell_pool,
         sell_pool_tick_arrays,

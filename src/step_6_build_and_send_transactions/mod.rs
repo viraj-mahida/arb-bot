@@ -5,7 +5,7 @@
 //!
 //! **What this step does:** turns that quote into real money — carefully.
 //!
-//! 1. **Decide** ([`main_decide_if_trade_is_worth_it`]): subtract every cost
+//! 1. **Decide** ([`decide_if_trade_is_worth_it::main_decide_from_quoted_round_trip`]): subtract every cost
 //!    (network fee, priority fee, Jito tip, flash-loan fee), refuse stale data,
 //!    cap the size, and set the minimum outputs that make a loss impossible.
 //! 2. **Fund** leg 1 from the wallet ([`trading_wallet`]: wrap SOL) or with a

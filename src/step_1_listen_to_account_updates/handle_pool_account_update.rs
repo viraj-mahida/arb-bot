@@ -36,8 +36,6 @@ impl AccountUpdateListener<'_> {
         let previous_pool = self.cache.pool_state_by_address(&pool_state.pool_address);
         let tick_arrays_near_price = tick_array_pdas_near_current_price(&pool_state);
         self.cache.save_pool_state(pool_state.clone());
-        // ignr: visualizer visitors follow the real (unshifted) price.
-        crate::dashboard_events::ignr_note_pool_change(previous_pool.as_deref(), &pool_state);
         let newly_watched_tick_arrays = self
             .cache
             .start_watching_tick_arrays(&tick_arrays_near_price);
@@ -48,6 +46,7 @@ impl AccountUpdateListener<'_> {
             .cache
             .watched_tick_array_count_for_pool(&pool_state.pool_address);
         print_logs::pool_account_updated(
+            previous_pool.as_deref(),
             &pool_state,
             loaded_tick_array_count,
             watched_tick_array_count,

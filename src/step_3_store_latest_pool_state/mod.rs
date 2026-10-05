@@ -13,7 +13,7 @@
 //! - the list of pools we care about ([`watched_pool_config`]),
 //! - fixed on-chain addresses ([`known_program_and_pool_addresses`]),
 //! - how tick-array addresses are computed ([`tick_array_pda_derivation`]),
-//! - helpers to print and parse Solana addresses ([`solana_public_key_helpers`]).
+//! - helpers to parse Solana addresses ([`solana_public_key_helpers`]).
 //!
 //! **What comes next:** Step 4 reads this cache to quote swaps, and Step 5 reads
 //! it to find the most profitable arbitrage size.

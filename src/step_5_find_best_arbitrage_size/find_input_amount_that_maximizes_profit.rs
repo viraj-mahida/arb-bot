@@ -67,27 +67,34 @@ pub fn main_find_input_amount_that_maximizes_profit(
             tick_index_to_sqrt_price(sell_pool_next_tick.tick_index);
         let buy_pool_next_tick_sqrt_price = tick_index_to_sqrt_price(buy_pool_next_tick.tick_index);
 
-        // If a price already sits exactly on its next boundary, cross it first
-        // (or stop, if the boundary is just the edge of the data we cached).
-        if sell_pool_next_tick_sqrt_price >= sell_pool.sqrt_price_q64_64 {
-            if sell_pool_next_tick.is_initialized_tick {
-                sell_pool.cross_tick_and_update_liquidity(
-                    sell_pool_next_tick.tick_index,
-                    SwapDirection::TokenAToTokenB,
-                );
-                continue;
+        // Both pools can already sit on their next boundary in this pass.
+        // Cross every such initialized tick, then start the next iteration.
+        // Continuing after only the sell pool would skip the buy pool.
+        // A boundary that is only the edge of cached data ends the walk.
+        let sell_pool_already_at_next_tick =
+            sell_pool_next_tick_sqrt_price >= sell_pool.sqrt_price_q64_64;
+        let buy_pool_already_at_next_tick =
+            buy_pool_next_tick_sqrt_price <= buy_pool.sqrt_price_q64_64;
+        if sell_pool_already_at_next_tick {
+            if !sell_pool_next_tick.is_initialized_tick {
+                break;
             }
-            break;
+            sell_pool.cross_tick_and_update_liquidity(
+                sell_pool_next_tick.tick_index,
+                SwapDirection::TokenAToTokenB,
+            );
         }
-        if buy_pool_next_tick_sqrt_price <= buy_pool.sqrt_price_q64_64 {
-            if buy_pool_next_tick.is_initialized_tick {
-                buy_pool.cross_tick_and_update_liquidity(
-                    buy_pool_next_tick.tick_index,
-                    SwapDirection::TokenBToTokenA,
-                );
-                continue;
+        if buy_pool_already_at_next_tick {
+            if !buy_pool_next_tick.is_initialized_tick {
+                break;
             }
-            break;
+            buy_pool.cross_tick_and_update_liquidity(
+                buy_pool_next_tick.tick_index,
+                SwapDirection::TokenBToTokenA,
+            );
+        }
+        if sell_pool_already_at_next_tick || buy_pool_already_at_next_tick {
+            continue;
         }
 
         // How much bridge token (USDC) until each event happens?
@@ -114,6 +121,14 @@ pub fn main_find_input_amount_that_maximizes_profit(
         );
         let bridge_amount_until_price_gap_is_gone =
             bridge_amount_until_price_gap_closes(&sell_pool, &buy_pool);
+
+        // Zero means the remaining edge is smaller than 1 unit of the bridge
+        // token (the formula truncates). That is the end of the profitable
+        // size. Leaving it out of the `min()` below would skip it and walk on
+        // to the next tick, past the point where another unit still profits.
+        if bridge_amount_until_price_gap_is_gone == 0 {
+            break;
+        }
 
         // Take the smallest positive distance: that event happens first.
         let bridge_amount_this_step = [
@@ -143,8 +158,8 @@ pub fn main_find_input_amount_that_maximizes_profit(
         }
 
         let what_stopped_this_step = WhatStopsThisWalkStep {
-            price_gap_after_fees_is_gone: bridge_amount_until_price_gap_is_gone > 0
-                && bridge_amount_this_step == bridge_amount_until_price_gap_is_gone
+            price_gap_after_fees_is_gone: bridge_amount_this_step
+                == bridge_amount_until_price_gap_is_gone
                 && bridge_amount_this_step < bridge_amount_until_sell_pool_hits_next_tick
                 && bridge_amount_this_step < bridge_amount_until_buy_pool_hits_next_tick,
             sell_pool_reached_next_tick: bridge_amount_this_step

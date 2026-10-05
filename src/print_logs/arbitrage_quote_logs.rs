@@ -2,6 +2,8 @@
 //!
 //! Formatting only. The quotes themselves are produced by Steps 4 and 5.
 
+use std::sync::Arc;
+
 use crate::step_3_store_latest_pool_state::{
     ConcentratedLiquidityPoolState, TickArrayAccountWithInitializedTicks,
 };
@@ -22,7 +24,16 @@ pub fn print_arbitrage_quotes(quotes: &RoundTripQuotesTouchingPool) {
 
 fn print_round_trip(tag: &str, quote: &DirectedRoundTripQuote) {
     match &quote.result {
-        Ok(round_trip) => print_successful_round_trip(tag, &quote.direction_label(), round_trip),
+        Ok(round_trip) => {
+            print_successful_round_trip(tag, &quote.direction_label(), round_trip);
+            sample_profit_curve(
+                &quote.sell_pool,
+                &tick_array_refs(&quote.sell_pool_tick_arrays),
+                &quote.buy_pool,
+                &tick_array_refs(&quote.buy_pool_tick_arrays),
+                round_trip.start_token_amount_in,
+            );
+        }
         // Already stated by the `[spread]` line; repeating it twice per update is noise.
         Err(WhySwapQuoteFailed::NoProfitablePriceGapAfterFees) => {}
         Err(reason) => log_line!("[{tag}]  {}  skipped: {reason}", quote.direction_label()),
@@ -62,10 +73,16 @@ fn print_successful_round_trip(
     );
 }
 
+fn tick_array_refs(
+    tick_arrays: &[Arc<TickArrayAccountWithInitializedTicks>],
+) -> Vec<&TickArrayAccountWithInitializedTicks> {
+    tick_arrays.iter().map(Arc::as_ref).collect()
+}
+
 /// A few exact quotes around the best size, for the visualizer's profit curve.
 ///
 /// No-op unless the dashboard is on, and then at most once every two seconds.
-pub fn ignr_sample_profit_curve(
+fn sample_profit_curve(
     sell_pool: &ConcentratedLiquidityPoolState,
     sell_pool_tick_arrays: &[&TickArrayAccountWithInitializedTicks],
     buy_pool: &ConcentratedLiquidityPoolState,
