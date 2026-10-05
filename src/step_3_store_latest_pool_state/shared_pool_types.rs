@@ -17,8 +17,8 @@ use super::solana_public_key_helpers::PublicKeyBytes;
 /// derives addresses differently, and has its own official quote library. This
 /// enum tells the other steps which rulebook to use.
 ///
-/// **Future:** production bots watch many DEXes (Meteora, Phoenix, Lifinity, …).
-/// Each one becomes a new variant here plus its own decoder and quote file.
+/// **Next:** more DEXes (Meteora, Phoenix, Lifinity, …). Each one becomes a
+/// new variant here plus its own decoder and quote file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DexProgram {
     /// Raydium's Concentrated Liquidity Market Maker program.

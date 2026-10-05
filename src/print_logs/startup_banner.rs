@@ -51,7 +51,7 @@ pub fn ignr_remember_dashboard_route_costs(settings: &BotSettingsFromEnvironment
 
 pub fn startup_banner(watched_pools: &WatchedPools) {
     log_line!(
-        "arb-bot  (educational two-pool arbitrage bot; simulate-only unless SEND_TRANSACTIONS=true)"
+        "arb-bot  (two-pool SOL/USDC arbitrage; sends when SEND_TRANSACTIONS=true)"
     );
     log_line!();
     log_line!("pipeline");

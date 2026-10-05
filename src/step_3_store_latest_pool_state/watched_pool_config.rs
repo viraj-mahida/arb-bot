@@ -5,9 +5,9 @@
 //! that are not stored inside the pool account itself (for example the token
 //! decimals, which live on separate mint accounts).
 //!
-//! **Future:** production bots watch hundreds of pools across many token pairs.
-//! That only needs a new constructor that builds a longer list; the lookup by
-//! address below already works for any number of pools.
+//! **Next:** watch hundreds of pools across many token pairs. That only needs
+//! a new constructor that builds a longer list; the lookup by address below
+//! already works for any number of pools.
 
 use std::collections::HashMap;
 

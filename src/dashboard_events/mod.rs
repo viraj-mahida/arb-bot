@@ -445,8 +445,8 @@ pub fn sent(route: &str, signature: &str) {
     }));
 }
 
-pub fn send_skipped() {
-    publish(json!({"type": "sendSkipped"}));
+pub fn send_skipped(route: &str) {
+    publish(json!({"type": "sendSkipped", "route": route}));
 }
 
 pub fn landed(ok: bool, signature: &str, wallet_change_sol: Option<f64>, error: Option<&str>) {

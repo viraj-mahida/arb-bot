@@ -124,20 +124,16 @@ pub fn trade_approved(trade: &ApprovedArbitrageTrade) {
     let sell = pool_label(&trade.sell_pool);
     let buy = pool_label(&trade.buy_pool);
     let instructions = [
-        "set compute budget".to_string(),
+        "watch the boards".to_string(),
+        "read the sell pool".to_string(),
+        "read the buy pool".to_string(),
         if flash_loan {
-            "borrow SOL from the bank".to_string()
+            "check the flash bank".to_string()
         } else {
-            "open the locker and wrap SOL".to_string()
+            "check the wallet can cover it".to_string()
         },
-        format!("sell SOL at {sell}"),
-        format!("buy SOL at {buy}"),
-        if flash_loan {
-            "repay the bank".to_string()
-        } else {
-            "unwrap SOL back into the locker".to_string()
-        },
-        "post the signed envelope (Jito tip)".to_string(),
+        "run the local quote".to_string(),
+        "send the quote to Jito".to_string(),
     ];
     crate::dashboard_events::approved(
         &format!("{sell}→{buy}"),
@@ -196,13 +192,13 @@ pub fn simulation_request_failed(error: &str) {
     crate::dashboard_events::simulation(false, None, None, Some(error));
 }
 
-pub fn send_skipped_simulate_only(trade: &ApprovedArbitrageTrade) {
+pub fn send_skipped_simulate_only(trade: &ApprovedArbitrageTrade, route: &str) {
     send_block(
         "skipped: SEND_TRANSACTIONS=false (dry-run mode)",
         trade,
         &[],
     );
-    crate::dashboard_events::send_skipped();
+    crate::dashboard_events::send_skipped(route);
 }
 
 pub fn sent(route: &str, signature: &str, trade: &ApprovedArbitrageTrade) {

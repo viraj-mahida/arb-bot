@@ -291,18 +291,26 @@ button, input { font: inherit; }
 
 .actor { position: absolute; width: 0; height: 0; }
 .actor .sprite { position: absolute; left: 0; bottom: 0; transform: translateX(-50%); overflow: visible; }
-.rbot .nametag { bottom: 148px; }
+.rbot .nametag { bottom: 128px; }
 .rbot .bubble {
   left: 0;
   right: auto;
-  bottom: 168px;
+  bottom: 156px;
   transform: translateX(-50%);
-  max-width: 150px;
+  max-width: 220px;
 }
 .rbot .bubble.flip {
   left: auto;
   right: 10px;
   transform: none;
+}
+.bubble .sandbox {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #5c6b80;
 }
 .nametag {
   position: absolute;
@@ -335,28 +343,45 @@ button, input { font: inherit; }
 .bubble.flip { left: auto; right: 54px; }
 .stamp {
   position: absolute;
-  left: 24px;
-  bottom: 150px;
-  transform: rotate(-8deg);
+  left: 62px;
+  bottom: 28px;
+  transform: rotate(-6deg);
   border: 3px solid currentColor;
-  padding: 4px 8px;
+  padding: 6px 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  font-size: 18px;
-  background: rgba(0, 0, 0, 0.35);
+  font-size: 16px;
+  line-height: 1.15;
+  background: #101820;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
   animation: pop 0.25s ease;
+  z-index: 6;
 }
-.stamp small { display: block; font-weight: 500; letter-spacing: 0; font-size: 10px; max-width: 180px; }
+.stamp small {
+  display: block;
+  margin-top: 3px;
+  font-weight: 600;
+  letter-spacing: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  max-width: 150px;
+  color: #e7eef6;
+}
+.stamp.tone-good { color: #b8ffcf; border-color: #7dffa8; }
+.stamp.tone-bad { color: #ffd5dc; border-color: #ff5d73; }
+.stamp.tone-neutral { color: #f4f7fb; border-color: #d6e2f0; }
 .tone-good { color: var(--good); }
 .tone-bad { color: var(--bad); }
 .tone-neutral { color: #d6e2f0; }
-@keyframes pop { from { transform: rotate(-8deg) scale(1.4); } }
+@keyframes pop { from { transform: rotate(-6deg) scale(1.2); } }
 
 .pose-walk .leg-l, .pose-carry .leg-l { animation: step 0.28s ease-in-out infinite; }
 .pose-walk .leg-r, .pose-carry .leg-r { animation: step 0.28s ease-in-out infinite reverse; }
 .pose-walk .body, .pose-carry .body { animation: bob 0.28s ease-in-out infinite; }
-.pose-shrug .body { transform: rotate(-8deg); transform-origin: 40px 70px; }
+.pose-idle .eyes { transform-origin: 48px 32px; animation: blink 4.2s infinite; }
+.pose-shrug .body { transform: rotate(-7deg); transform-origin: 48px 86px; }
 .pose-celebrate .body { animation: jump 0.45s ease; }
+@keyframes blink { 0%, 88%, 100% { transform: scaleY(1); } 94% { transform: scaleY(0.12); } }
 @keyframes step { 50% { transform: translateY(-5px); } }
 @keyframes bob { 50% { transform: translateY(-3px); } }
 @keyframes jump { 40% { transform: translateY(-10px); } }

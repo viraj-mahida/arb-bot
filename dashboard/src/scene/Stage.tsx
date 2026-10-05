@@ -162,7 +162,7 @@ function Cables() {
   const screen = layout.wallScreen;
   const lines = [
     { id: "tap", color: "#5ee7ff", d: "M 78 310 C 120 310, 180 330, 208 348", from: [78, 310], to: [208, 348] },
-    { id: "screen", color: "#7dffe8", d: `M 378 428 C 500 428, 590 380, ${screen.x} ${screen.y + screen.h - 16}`, from: [378, 428], to: [screen.x, screen.y + screen.h - 16] },
+    { id: "screen", color: "#7dffe8", d: `M 400 300 C 490 210, 575 190, ${screen.x} ${screen.y + 140}`, from: [400, 300], to: [screen.x, screen.y + 140] },
     { id: "jito", color: "#ffb020", d: "M 168 780 C 120 810, 80 828, 52 840", from: [168, 780], to: [52, 840] },
   ];
   return (

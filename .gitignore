@@ -4,3 +4,4 @@
 bot-keypair.json
 dashboard/node_modules/
 dashboard/dist/
+.DS_Store

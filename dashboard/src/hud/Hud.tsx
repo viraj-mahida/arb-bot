@@ -73,7 +73,7 @@ export function Hud() {
       <footer className="bottombar">
         <section>
           <div className="panel-title">
-            trade anatomy <em className="pose">{pose}</em>
+            what he's doing <em className="pose">{pose}</em>
           </div>
           <ol className="steps">
             {instructions.map((step, index) => (

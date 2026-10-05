@@ -70,7 +70,7 @@ export type BotEvent = {
 
 export type Pose = "idle" | "walk" | "carry" | "shrug" | "celebrate";
 
-export type Carry = "bag" | "envelope" | null;
+export type Carry = "slip" | "notes" | "packet" | null;
 
 export type Actor = {
   id: string;

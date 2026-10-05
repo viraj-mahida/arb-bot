@@ -12,6 +12,7 @@ type Rbot = {
   pose: Pose;
   carry: Carry;
   bubble: string;
+  sandbox: boolean;
 };
 
 type CityState = {
@@ -61,7 +62,12 @@ let trading = false;
 let lastSkipAt = 0;
 let lastWhaleAt = 0;
 let lastGeyserSound = 0;
-let pendingResult: Stamp | null = null;
+type SendOutcome =
+  | { kind: "sent"; route: string }
+  | { kind: "sandbox"; route: string }
+  | { kind: "reverted"; detail: string };
+let sendOutcome: SendOutcome | null = null;
+let deferredLand: { ok: boolean; detail: string } | null = null;
 let routeReachesJito = false;
 let awaitChainResult = false;
 
@@ -113,12 +119,29 @@ function runScript(exclusive: boolean, fn: (alive: () => boolean) => Promise<voi
   queue = queue.then(() => fn(alive)).catch((error) => console.error(error));
 }
 
-async function walk(alive: () => boolean, x: number, y: number, pose: Pose, bubble?: string) {
+async function go(
+  alive: () => boolean,
+  stepIndex: number,
+  x: number,
+  y: number,
+  bubble: string,
+  carry: Carry,
+  pose: Pose,
+) {
   if (!alive()) return;
   useCity.setState((state) => ({
-    rbot: { ...state.rbot, x, y, pose, bubble: bubble ?? state.rbot.bubble },
+    stepIndex,
+    rbot: { ...state.rbot, x, y, pose, carry, bubble },
   }));
   await sleep(720);
+}
+
+async function hold(alive: () => boolean, bubble: string, carry: Carry, pose: Pose, ms: number) {
+  if (!alive()) return;
+  useCity.setState((state) => ({
+    rbot: { ...state.rbot, bubble, carry, pose },
+  }));
+  await sleep(ms);
 }
 
 function signedSol(value: number) {
@@ -134,7 +157,15 @@ async function goHome(alive: () => boolean) {
   showLaptop(null);
   useCity.setState((state) => ({
     stamp: null,
-    rbot: { ...state.rbot, x: spots.screen.x, y: spots.screen.y, pose: "walk", carry: null, bubble: "" },
+    rbot: {
+      ...state.rbot,
+      x: spots.screen.x,
+      y: spots.screen.y,
+      pose: "walk",
+      carry: null,
+      bubble: "",
+      sandbox: false,
+    },
   }));
   await sleep(720);
   if (!alive()) return;
@@ -158,21 +189,53 @@ async function playRoute(
     known: boolean;
     partial?: boolean;
     local: boolean;
-    instructions: string[];
   },
 ) {
   const sell = spotFor(plan.sellDex);
   const buy = spotFor(plan.buyDex);
-  const pair = prettyDirection(`${plan.sellDex}→${plan.buyDex}`);
-  useCity.setState({ instructions: plan.instructions, stepIndex: -1, stamp: null, laptop: null });
-  const setStep = (stepIndex: number, bubble: string, carry: Carry, pose: Pose = "carry") => {
-    useCity.setState((state) => ({ stepIndex, rbot: { ...state.rbot, bubble, carry, pose } }));
-  };
+  const funding = plan.flashLoan ? spots.bank : spots.locker;
+  const fundingStep = plan.flashLoan ? "check the flash bank" : "check the wallet can cover it";
+  useCity.setState({
+    instructions: [
+      "watch the boards",
+      "read the sell pool",
+      "read the buy pool",
+      fundingStep,
+      "run the local quote",
+      "send the quote to Jito",
+    ],
+    stepIndex: -1,
+    stamp: null,
+    laptop: null,
+  });
 
-  await walk(alive, spots.screen.x, spots.screen.y, "walk", pair || "a gap on the desks");
+  await go(alive, 0, spots.screen.x, spots.screen.y, "watching the boards", null, "walk");
   if (!alive()) return;
 
-  await walk(alive, spots.laptop.x, spots.laptop.y, "walk", "opening my laptop");
+  await go(alive, 1, sell.x, sell.y, "reading the sell pool", null, "walk");
+  if (!alive()) return;
+  await hold(alive, "price, fee, liquidity, tick", "slip", "idle", 520);
+  if (!alive()) return;
+
+  await go(alive, 2, buy.x, buy.y, "reading the buy pool", "slip", "carry");
+  if (!alive()) return;
+  await hold(alive, "both pools noted", "notes", "idle", 520);
+  if (!alive()) return;
+
+  await go(
+    alive,
+    3,
+    funding.x,
+    funding.y,
+    plan.flashLoan ? "funding is the flash bank" : "does the wallet cover this?",
+    "notes",
+    "carry",
+  );
+  if (!alive()) return;
+  await hold(alive, plan.flashLoan ? "flash bank checked" : "wallet checked", "notes", "idle", 420);
+  if (!alive()) return;
+
+  await go(alive, 4, spots.laptop.x, spots.laptop.y, "running the local quote", "notes", "carry");
   if (!alive()) return;
   showLaptop({
     mode: "costs",
@@ -187,73 +250,107 @@ async function playRoute(
     worth: plan.worthIt,
   });
   const verdict = !plan.known
-    ? "no fee on this quote"
+    ? "can't price the fees yet"
     : plan.partial
-      ? "partial fill, leaving it"
+      ? "partial fill — leaving it"
       : plan.worthIt
-        ? "still worth sending"
-        : "not enough after the tip";
-  useCity.setState((state) => ({ rbot: { ...state.rbot, pose: "idle", bubble: verdict } }));
-  await sleep(1800);
+        ? "quote pays — I'll send it"
+        : "not enough after fees";
+  await hold(alive, verdict, "notes", "idle", 1800);
   if (!alive()) return;
 
   if (!plan.worthIt) {
-    useCity.setState({ stepIndex: -1 });
+    showLaptop(null);
+    await hold(alive, verdict, null, "shrug", 900);
+    if (!alive()) return;
     await goHome(alive);
     return;
   }
 
   showLaptop(null);
-  if (plan.flashLoan) {
-    setStep(1, "borrowing SOL from the bank", "bag");
-    await walk(alive, spots.bank.x, spots.bank.y, "carry");
-  } else {
-    setStep(1, "taking SOL from the locker", "bag");
-    await walk(alive, spots.locker.x, spots.locker.y, "carry");
-  }
-  if (!alive()) return;
-
-  setStep(2, `selling SOL at ${poolName(plan.sellDex)}`, "bag");
-  await walk(alive, sell.x, sell.y, "carry");
-  if (!alive()) return;
-
-  setStep(3, `buying SOL back at ${poolName(plan.buyDex)}`, "bag");
-  await walk(alive, buy.x, buy.y, "carry");
-  if (!alive()) return;
-
-  showLaptop({ mode: "build", lines: plan.instructions });
-  setStep(4, "stacking the instructions", null, "idle");
-  await walk(alive, spots.laptop.x, spots.laptop.y, "walk");
-  await sleep(1100);
-  if (!alive()) return;
-  showLaptop(null);
-
-  setStep(5, "posting the signed envelope", "envelope");
-  await walk(alive, spots.jito.x, spots.jito.y, "carry");
+  await go(alive, 5, spots.jito.x, spots.jito.y, "taking the quote to be sent", "packet", "carry");
   if (!alive()) return;
 
   const chain = awaitChainResult || !plan.local;
-  const deadline = Date.now() + (chain ? 2200 : 400);
-  while (!pendingResult && Date.now() < deadline) await sleep(80);
+  const deadline = Date.now() + (chain ? 2200 : 500);
+  while (!sendOutcome && Date.now() < deadline) await sleep(80);
   if (!alive()) return;
-  const net = plan.netSol;
-  const stamp = pendingResult ?? {
-    text: chain ? "SIGNED" : "LOCAL QUOTE",
-    tone: "neutral" as const,
-    detail: net != null ? `net ${signedSol(net)} SOL` : "built from the local quote",
-  };
-  pendingResult = null;
-  blipStamp(stamp.tone !== "bad");
-  useCity.setState((state) => ({
-    stamp,
-    coins: state.coins + (stamp.tone === "bad" ? 0 : 1),
-    rbot: { ...state.rbot, pose: "celebrate", carry: null, bubble: stamp.detail },
-  }));
-  await sleep(1600);
-  if (!alive()) return;
+  const outcome = sendOutcome;
+  sendOutcome = null;
+
+  if (outcome?.kind === "reverted") {
+    useCity.setState((state) => ({
+      stamp: { text: "REVERTED", tone: "bad", detail: outcome.detail },
+      rbot: { ...state.rbot, pose: "shrug", carry: null, bubble: "the quote reverted", sandbox: false },
+    }));
+    await sleep(1200);
+    if (!alive()) return;
+    await goHome(alive);
+    return;
+  }
+
+  if (outcome?.kind === "sent" || outcome?.kind === "sandbox") {
+    const where = routeLabel(outcome.route);
+    useCity.setState((state) => ({
+      stamp: null,
+      rbot: {
+        ...state.rbot,
+        pose: "idle",
+        carry: null,
+        bubble: `Txn sent to ${where}`,
+        sandbox: outcome.kind === "sandbox",
+      },
+    }));
+    await sleep(1400);
+    if (!alive()) return;
+  }
+
   await goHome(alive);
   if (!alive()) return;
   useCity.setState((state) => ({ stepIndex: state.instructions.length }));
+}
+
+function releaseScript() {
+  scriptBusy = false;
+  const landed = deferredLand;
+  if (!landed) return;
+  deferredLand = null;
+  scriptBusy = true;
+  runScript(false, async (alive) => {
+    try {
+      await showLanding(alive, landed.ok, landed.detail);
+    } finally {
+      releaseScript();
+    }
+  });
+}
+
+function routeLabel(route: string): string {
+  return /rpc/i.test(route) && !/jito/i.test(route) ? "RPC" : "Jito";
+}
+
+async function showLanding(alive: () => boolean, ok: boolean, detail: string) {
+  if (!alive()) return;
+  if (ok) {
+    blipStamp(true);
+    useCity.setState((state) => ({
+      stamp: { text: "LANDED", tone: "good", detail },
+      coins: state.coins + 1,
+      rbot: { ...state.rbot, pose: "celebrate", carry: null, bubble: "it landed", sandbox: false },
+    }));
+    await sleep(1600);
+  } else {
+    useCity.setState((state) => ({
+      stamp: { text: "FAILED", tone: "bad", detail },
+      rbot: { ...state.rbot, pose: "shrug", carry: null, bubble: "it didn't land", sandbox: false },
+    }));
+    await sleep(1200);
+  }
+  if (!alive()) return;
+  useCity.setState((state) => ({
+    stamp: null,
+    rbot: { ...state.rbot, pose: "idle", bubble: "watching for a gap", carry: null, sandbox: false },
+  }));
 }
 
 function pushLog(tag: string, text: string, tone: string) {
@@ -282,15 +379,6 @@ function spawnActor(actor: Omit<Actor, "id">, deskX: number, deskY: number) {
   }, 2700);
 }
 
-const defaultInstructions = [
-  "set compute budget",
-  "fund the trade",
-  "sell SOL on the expensive desk",
-  "buy SOL on the cheap desk",
-  "repay funding",
-  "post the signed envelope",
-];
-
 export const useCity = create<CityState>((set, get) => ({
   link: "connecting",
   demoBps: 0,
@@ -316,9 +404,16 @@ export const useCity = create<CityState>((set, get) => ({
   skipped: 0,
   simulated: 0,
   bestProfitSol: null,
-  instructions: defaultInstructions,
+  instructions: [
+    "watch the boards",
+    "read the sell pool",
+    "read the buy pool",
+    "check funding",
+    "run the local quote",
+    "send the quote to Jito",
+  ],
   stepIndex: -1,
-  rbot: { x: spots.screen.x, y: spots.screen.y, pose: "idle", carry: null, bubble: "watching for a gap" },
+  rbot: { x: spots.screen.x, y: spots.screen.y, pose: "idle", carry: null, bubble: "watching for a gap", sandbox: false },
   laptop: null,
   stamp: null,
   actors: [],
@@ -472,20 +567,12 @@ export const useCity = create<CityState>((set, get) => ({
               known,
               partial: event.partial,
               local: true,
-              instructions: [
-                "set compute budget",
-                flashLoan ? "borrow SOL from the bank" : "open the locker and wrap SOL",
-                `sell SOL at ${poolName(sellDex)}`,
-                `buy SOL at ${poolName(buyDex)}`,
-                flashLoan ? "repay the bank" : "unwrap SOL back into the locker",
-                "post the signed envelope (Jito tip)",
-              ],
             });
           } finally {
-            scriptBusy = false;
             routeReachesJito = false;
             if (trading) trading = false;
             awaitChainResult = false;
+            releaseScript();
           }
         });
         break;
@@ -506,7 +593,7 @@ export const useCity = create<CityState>((set, get) => ({
         scriptBusy = true;
         runScript(false, async (alive) => {
           if (!alive()) {
-            scriptBusy = false;
+            releaseScript();
             return;
           }
           set((state) => ({ rbot: { ...state.rbot, pose: "shrug", bubble: reason } }));
@@ -514,13 +601,12 @@ export const useCity = create<CityState>((set, get) => ({
           if (alive()) {
             set((state) => ({ rbot: { ...state.rbot, pose: "idle", bubble: "watching for a gap" } }));
           }
-          scriptBusy = false;
+          releaseScript();
         });
         break;
       }
       case "approved": {
         trading = true;
-        pendingResult = null;
         pushLog(
           "TRADE",
           `${poolName(event.sellDex)} → ${poolName(event.buyDex)}  in ${event.inputSol?.toFixed(4)} SOL  net ${event.profitSol?.toFixed(6)}`,
@@ -554,13 +640,12 @@ export const useCity = create<CityState>((set, get) => ({
               worthIt: true,
               known: event.costs != null,
               local: false,
-              instructions: event.instructions ?? defaultInstructions,
             });
           } finally {
             trading = false;
-            scriptBusy = false;
             routeReachesJito = false;
             awaitChainResult = false;
+            releaseScript();
           }
         });
         break;
@@ -574,32 +659,28 @@ export const useCity = create<CityState>((set, get) => ({
               : state.bestProfitSol,
         }));
         const ok = Boolean(event.ok);
-        pendingResult = {
-          text: ok ? "SIMULATED" : "REVERTED",
-          tone: ok ? "good" : "bad",
-          detail: ok
-            ? `${event.computeUnits ?? "?"} CU · wallet ${event.walletChangeSol != null ? `${event.walletChangeSol >= 0 ? "+" : ""}${event.walletChangeSol.toFixed(6)} SOL` : "?"}`
-            : (event.error ?? "simulation failed"),
-        };
-        pushLog(ok ? "SIM" : "SIM", pendingResult.detail, ok ? "good" : "bad");
+        const detail = ok
+          ? `${event.computeUnits ?? "?"} CU · wallet ${event.walletChangeSol != null ? `${event.walletChangeSol >= 0 ? "+" : ""}${event.walletChangeSol.toFixed(6)} SOL` : "?"}`
+          : (event.error ?? "simulation failed");
+        if (!ok) sendOutcome = { kind: "reverted", detail };
+        pushLog("SIM", detail, ok ? "good" : "bad");
         break;
       }
       case "sendSkipped":
-        if (!pendingResult) {
-          pendingResult = { text: "SIMULATE ONLY", tone: "neutral", detail: "SEND_TRANSACTIONS is off" };
+        if (sendOutcome?.kind !== "reverted") {
+          sendOutcome = { kind: "sandbox", route: event.route ?? "jito" };
         }
-        pushLog("SEND", "dry run — not sent", "info");
+        pushLog("SEND", "sandbox — not broadcast", "info");
         break;
       case "sent":
-        pushLog("SENT", `${event.route}  ${event.signature?.slice(0, 12) ?? ""}…`, "good");
-        pendingResult = { text: "SENT", tone: "good", detail: event.route ?? "" };
+        sendOutcome = { kind: "sent", route: event.route ?? "jito" };
+        pushLog("SENT", `${routeLabel(event.route ?? "")}  ${event.signature?.slice(0, 12) ?? ""}…`, "good");
         break;
       case "landed": {
         const ok = Boolean(event.ok);
         const detail = ok
-          ? `confirmed ${event.walletChangeSol != null ? `${event.walletChangeSol >= 0 ? "+" : ""}${event.walletChangeSol.toFixed(6)} SOL` : ""}`
+          ? `${event.walletChangeSol != null ? `${event.walletChangeSol >= 0 ? "+" : ""}${event.walletChangeSol.toFixed(6)} SOL` : "confirmed"}`
           : (event.error ?? "not landed");
-        pendingResult = { text: ok ? "LANDED" : "FAILED", tone: ok ? "good" : "bad", detail };
         pushLog(ok ? "LAND" : "FAIL", detail, ok ? "good" : "bad");
         if (event.walletChangeSol != null && ok) {
           set((state) => ({
@@ -607,6 +688,8 @@ export const useCity = create<CityState>((set, get) => ({
             walletSol: state.walletSol != null ? state.walletSol + (event.walletChangeSol ?? 0) : state.walletSol,
           }));
         }
+        deferredLand = { ok, detail };
+        if (!scriptBusy) releaseScript();
         break;
       }
       default:

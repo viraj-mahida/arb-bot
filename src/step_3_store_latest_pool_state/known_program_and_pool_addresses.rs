@@ -4,8 +4,8 @@
 //! **Pools** are accounts owned by those programs; each pool trades one token pair
 //! at one fee tier. These are today's SOL/USDC pools.
 //!
-//! **Future:** a production bot would load pools from a config file or discover
-//! them by scanning each DEX program's accounts, instead of hard-coding them.
+//! **Next:** load pools from a config file or discover them by scanning each
+//! DEX program's accounts, instead of hard-coding them.
 
 /// Raydium's concentrated-liquidity (CLMM) program.
 pub const RAYDIUM_CLMM_PROGRAM_ADDRESS: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";

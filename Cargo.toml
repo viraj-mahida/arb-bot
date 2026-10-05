@@ -2,6 +2,7 @@
 name = "arb-bot"
 version = "0.1.0"
 edition = "2024"
+description = "Solana two-pool arbitrage bot, built to make money if deployed correctly. Sends only when SEND_TRANSACTIONS=true."
 
 [dependencies]
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }

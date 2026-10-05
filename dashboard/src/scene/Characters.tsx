@@ -12,10 +12,8 @@ function feetStyle(x: number, y: number) {
 
 export function Rbot() {
   const rbot = useCity((state) => state.rbot);
-  const gap = useCity((state) => state.gapBps);
   const stamp = useCity((state) => state.stamp);
   const walking = rbot.pose === "walk" || rbot.pose === "carry";
-  const gapText = gap == null ? "—" : gap.toFixed(1);
 
   return (
     <motion.div
@@ -23,7 +21,12 @@ export function Rbot() {
       animate={feetStyle(rbot.x, rbot.y)}
       transition={{ duration: walking ? 0.68 : 0.25, ease: "easeInOut" }}
     >
-      {rbot.bubble && <div className={`bubble${rbot.x > 1300 ? " flip" : ""}`}>{rbot.bubble}</div>}
+      {rbot.bubble && (
+        <div className={`bubble${rbot.x > 1300 ? " flip" : ""}`}>
+          {rbot.bubble}
+          {rbot.sandbox && <small className="sandbox">(sandbox)</small>}
+        </div>
+      )}
       {stamp && (
         <div className={`stamp tone-${stamp.tone}`}>
           {stamp.text}
@@ -31,43 +34,93 @@ export function Rbot() {
         </div>
       )}
       <div className="nametag">RBOT</div>
-      <svg className="sprite" viewBox="0 0 80 108" width="108" height="146">
-        <defs>
-          <filter id="rbot-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="1.2" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        <ellipse className="shadow" cx="40" cy="103" rx="16" ry="4" fill="rgba(0,0,0,0.5)" />
+      <svg className="sprite" viewBox="0 0 96 120" width="104" height="130">
+        <ellipse className="shadow" cx="48" cy="116" rx="18" ry="4" fill="rgba(0,0,0,0.4)" />
         <g className="legs">
-          <path className="leg-l" d="M24 76 H38 L37 91 H23 Z" fill="#2a3c52" stroke="#7af0ff" strokeWidth="1" />
-          <path className="leg-l" d="M22 91 H38 L36 104 H20 Z" fill="#1c2c40" stroke="#5ee7ff" strokeWidth="1" />
-          <rect className="leg-l" x="26" y="89" width="10" height="2.5" fill="#5ee7ff" />
-          <path className="leg-r" d="M42 76 H56 L57 91 H43 Z" fill="#2a3c52" stroke="#7af0ff" strokeWidth="1" />
-          <path className="leg-r" d="M42 91 H58 L60 104 H44 Z" fill="#1c2c40" stroke="#5ee7ff" strokeWidth="1" />
-          <rect className="leg-r" x="44" y="89" width="10" height="2.5" fill="#5ee7ff" />
+          <g className="leg-l">
+            <rect x="30" y="88" width="12" height="16" rx="6" fill="#3c4a5e" />
+            <ellipse cx="36" cy="106" rx="8" ry="4.5" fill="#2c3848" />
+          </g>
+          <g className="leg-r">
+            <rect x="54" y="88" width="12" height="16" rx="6" fill="#3c4a5e" />
+            <ellipse cx="60" cy="106" rx="8" ry="4.5" fill="#2c3848" />
+          </g>
         </g>
         <g className="body">
-          <path d="M12 50 L6 64 L14 82 L30 86 H50 L66 82 L74 64 L68 50 Z" fill="#31465e" stroke="#9af6ff" strokeWidth="1.3" />
-          <path d="M22 56 H58 L54 74 H26 Z" fill="#071018" stroke="#5ee7ff" strokeWidth="1.1" />
-          <text x="40" y="68" textAnchor="middle" fill="#7dffa8" fontSize="10" fontFamily="IBM Plex Mono, monospace">
-            {gapText}
-          </text>
-          <path d="M6 58 H16 L14 66 H4 Z" fill="#ffb020" filter="url(#rbot-glow)" />
-          <path d="M64 58 H74 L76 66 H66 Z" fill="#5ee7ff" filter="url(#rbot-glow)" />
-          <path d="M28 50 L24 40 H56 L52 50 Z" fill="#24364c" stroke="#7af0ff" strokeWidth="0.8" />
-          <path d="M20 40 L16 24 L26 14 H54 L64 24 L60 40 Z" fill="#3a516c" stroke="#d7fbff" strokeWidth="1.2" />
-          <rect x="24" y="22" width="32" height="9" fill="#041820" stroke="#5ee7ff" strokeWidth="0.8" />
-          <rect x="26" y="24" width="28" height="4" fill="#7dfff0" filter="url(#rbot-glow)" />
-          <path d="M34 14 L40 6 L46 14 Z" fill="#5ee7ff" filter="url(#rbot-glow)" />
-          {rbot.carry === "bag" && <path d="M60 50 H74 L72 66 H62 Z" fill="#f0c14a" stroke="#1c2433" strokeWidth="1" />}
-          {rbot.carry === "envelope" && <path d="M56 48 H74 L72 60 H58 Z" fill="#f4efe4" stroke="#1c2433" strokeWidth="1" />}
+          <rect x="16" y="64" width="10" height="18" rx="5" fill="#7ecfc4" />
+          <rect x="70" y="62" width="10" height="18" rx="5" fill="#7ecfc4" />
+          <rect x="26" y="52" width="44" height="40" rx="18" fill="#8ee0d4" />
+          <rect x="34" y="62" width="28" height="18" rx="9" fill="#f6fffc" />
+          <circle cx="48" cy="34" r="22" fill="#f7fbff" stroke="#8ee0d4" strokeWidth="3" />
+          <line x1="48" y1="14" x2="48" y2="6" stroke="#5eb8ae" strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="48" cy="5" r="3.2" fill="#ffb020" />
+          <Face pose={rbot.pose} />
+          <ellipse cx="30" cy="40" rx="3.2" ry="1.7" fill="#ffb3c4" opacity="0.85" />
+          <ellipse cx="66" cy="40" rx="3.2" ry="1.7" fill="#ffb3c4" opacity="0.85" />
+          {rbot.carry && <Held kind={rbot.carry} />}
         </g>
       </svg>
     </motion.div>
+  );
+}
+
+function Face({ pose }: { pose: string }) {
+  if (pose === "celebrate") {
+    return (
+      <>
+        <path d="M36 34 Q40 29 44 34" fill="none" stroke="#243044" strokeWidth="2.2" strokeLinecap="round" />
+        <path d="M52 34 Q56 29 60 34" fill="none" stroke="#243044" strokeWidth="2.2" strokeLinecap="round" />
+        <path d="M41 42 Q48 48 55 42" fill="none" stroke="#243044" strokeWidth="1.8" strokeLinecap="round" />
+      </>
+    );
+  }
+  if (pose === "shrug") {
+    return (
+      <>
+        <path d="M34 28 Q40 26 44 30" fill="none" stroke="#243044" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="39" cy="34" r="3" fill="#243044" />
+        <circle cx="57" cy="33" r="3" fill="#243044" />
+        <path d="M42 44 Q48 42 54 45" fill="none" stroke="#243044" strokeWidth="1.6" strokeLinecap="round" />
+      </>
+    );
+  }
+  return (
+    <g className="eyes">
+      <ellipse cx="39" cy="33" rx="4.2" ry="4.8" fill="#243044" />
+      <ellipse cx="57" cy="33" rx="4.2" ry="4.8" fill="#243044" />
+      <circle cx="40.6" cy="31.4" r="1.5" fill="#fff" />
+      <circle cx="58.6" cy="31.4" r="1.5" fill="#fff" />
+      <path d="M42 43 Q48 47 54 43" fill="none" stroke="#243044" strokeWidth="1.7" strokeLinecap="round" />
+    </g>
+  );
+}
+
+function Held({ kind }: { kind: "slip" | "notes" | "packet" }) {
+  if (kind === "slip") {
+    return (
+      <g transform="translate(78, 48)">
+        <rect width="28" height="32" rx="3" fill="#ffe56a" stroke="#1c2433" strokeWidth="1.4" />
+        <path d="M6 10 H22 M6 16 H18 M6 22 H14" stroke="#1c2433" strokeWidth="1.4" strokeLinecap="round" />
+      </g>
+    );
+  }
+  if (kind === "notes") {
+    return (
+      <g transform="translate(76, 42)">
+        <rect width="32" height="40" rx="3" fill="#f7f1e4" stroke="#1c2433" strokeWidth="1.4" />
+        <rect x="10" y="-4" width="12" height="8" rx="2" fill="#8ee0d4" stroke="#1c2433" strokeWidth="1.2" />
+        <path d="M6 12 H26 M6 19 H26 M6 26 H20" stroke="#1c2433" strokeWidth="1.5" strokeLinecap="round" />
+      </g>
+    );
+  }
+  return (
+    <g transform="translate(76, 52)">
+      <rect width="34" height="24" rx="2" fill="#f4efe4" stroke="#1c2433" strokeWidth="1.4" />
+      <path d="M1 1 L17 14 L33 1" fill="none" stroke="#1c2433" strokeWidth="1.4" />
+      <text x="17" y="20" textAnchor="middle" fill="#1c2433" fontSize="8" fontFamily="IBM Plex Mono, monospace">
+        TX
+      </text>
+    </g>
   );
 }
 

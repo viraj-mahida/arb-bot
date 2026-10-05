@@ -55,7 +55,7 @@ pub async fn main_simulate_then_send_if_allowed(
     send_real_transactions: bool,
 ) -> Option<SubmittedTransaction> {
     if !simulate_on_rpc && !send_real_transactions {
-        print_logs::send_skipped_simulate_only(trade);
+        print_logs::send_skipped_simulate_only(trade, sandbox_route(clients, routes));
         return None;
     }
     let Some(primary) = routes.jito.or(routes.rpc) else {
@@ -85,7 +85,7 @@ pub async fn main_simulate_then_send_if_allowed(
             lamports_change(balance_before, simulation.watch_address_lamports_after),
         );
         if !send_real_transactions {
-            print_logs::send_skipped_simulate_only(trade);
+            print_logs::send_skipped_simulate_only(trade, sandbox_route(clients, routes));
             return None;
         }
         balance_before
@@ -171,6 +171,14 @@ pub async fn wait_for_confirmation(
         }
     }
     print_logs::transaction_not_landed(signature, trade);
+}
+
+fn sandbox_route(clients: &SendingClients<'_>, routes: &RouteTransactions<'_>) -> &'static str {
+    if clients.jito.is_some() && routes.jito.is_some() {
+        "jito"
+    } else {
+        "rpc"
+    }
 }
 
 fn lamports_change(before: Option<u64>, after: Option<u64>) -> Option<i128> {

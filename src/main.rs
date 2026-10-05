@@ -1,4 +1,8 @@
-//! # arb-bot — an educational Solana arbitrage watcher
+//! # arb-bot — a Solana arbitrage bot
+//!
+//! Built to make money if it is deployed correctly: live pool state, each
+//! pool's own swap math, and a signed trade that is sent when
+//! `SEND_TRANSACTIONS=true`.
 //!
 //! ## The story in plain words
 //!
@@ -53,12 +57,11 @@
 //! the steps (and the connections) call it whenever they have something to
 //! show. Trading settings are in [`bot_settings`]; see `.env.example`.
 //!
-//! ## Roadmap — not built yet
+//! ## Still to add
 //!
-//! A production bot would also watch many DEXes, many pools, and many token
-//! pairs, search routes through three or more pools, create its own address
-//! lookup table, read the flash-loan fee from the reserve, and support
-//! Token-2022 mints.
+//! More DEXes, more pools, and more token pairs; routes through three or more
+//! pools; a bot-owned address lookup table; the flash-loan fee read from the
+//! reserve; and Token-2022 mints.
 
 use crate::bot_settings::BotSettingsFromEnvironment;
 use crate::solana_connections::{SolanaRpcClient, connect_to_geyser_grpc};

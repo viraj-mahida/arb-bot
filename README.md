@@ -1,6 +1,6 @@
 # arb-bot
 
-Educational Solana arbitrage watcher. It watches SOL/USDC pools on Orca and Raydium, quotes a round trip with each pool's own math, and sends only when `SEND_TRANSACTIONS=true`.
+A Solana arbitrage bot, built to make money if it is deployed correctly. It watches SOL/USDC pools on Orca and Raydium, quotes a round trip with each pool's own math, and sends the trade when `SEND_TRANSACTIONS=true`.
 
 The folders are a reading order: [PIPELINE.md](PIPELINE.md). How the process is wired: [ARCHITECTURE.md](ARCHITECTURE.md). Terms: [GLOSSARY.md](GLOSSARY.md). Settings: `.env.example`.
 

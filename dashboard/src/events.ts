@@ -9,7 +9,7 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function playRecording(text: string, speed: number) {
+async function playRecording(text: string, speed: number, maxGapMs = 900) {
   const events: BotEvent[] = text
     .split("\n")
     .map((line) => line.trim())
@@ -17,7 +17,7 @@ async function playRecording(text: string, speed: number) {
     .map((line) => JSON.parse(line) as BotEvent);
   let previous = events[0]?.t ?? 0;
   for (const event of events) {
-    const delta = Math.min(900, Math.max(0, (event.t ?? previous) - previous));
+    const delta = Math.min(maxGapMs, Math.max(0, (event.t ?? previous) - previous));
     previous = event.t ?? previous;
     if (delta > 0) await sleep(delta / speed);
     useCity.getState().apply(event);
@@ -35,10 +35,10 @@ export function useEventSource() {
 
     if (params.has("preview")) {
       setLink("preview");
-      void fetch("/preview.jsonl")
+      void fetch("/preview.jsonl?demo=2")
         .then((response) => response.text())
         .then((text) => {
-          if (!stopped) return playRecording(text, 1);
+          if (!stopped) return playRecording(text, 1, 16_000);
         });
       return () => {
         stopped = true;
