@@ -4,9 +4,13 @@ A Solana bot that watches six SOL/USDC pools on Orca and Raydium. When one pool'
 
 Sending is off by default. A quote that looks profitable can still lose money once it is on chain: other bots take the same gap, the transaction can fail to land, and you still pay fees on the ones that do. Read `.env.example` before you change anything.
 
+![How the bot works](docs/how-the-bot-works.png)
+
 ## Try the visualizer
 
 The visualizer is a separate page. It does not need a wallet.
+
+![Rbot visualizer](docs/visualizer.jpg)
 
 Sample data, nothing on chain:
 
